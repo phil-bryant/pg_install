@@ -1,0 +1,62 @@
+---
+# PostgreSQL version - stable LTS version
+postgres_version: "15"
+postgres_formula: "postgresql@15"
+
+# PostgreSQL directories and paths
+postgres_data_dir: "/opt/homebrew/var/postgresql@15"
+postgres_log_dir: "/opt/homebrew/var/log/postgresql@15"
+postgres_conf_dir: "/opt/homebrew/etc/postgresql@15"
+
+# Service configuration
+postgres_service_name: "postgresql@15"
+
+# Database configuration
+postgres_port: 5432
+postgres_listen_addresses: "localhost"
+postgres_max_connections: 100
+
+# Main database and admin user
+postgres_admin_user: "postgres"
+postgres_admin_password: "{{ lookup('env', 'POSTGRES_ADMIN_PASSWORD') | default('changeme_admin', true) }}"
+
+# Application database
+app_database: "myapp_db"
+app_database_owner: "app_owner"
+
+# Application users
+postgres_users:
+  - name: "app_owner"
+    password: "{{ lookup('env', 'APP_OWNER_PASSWORD') | default('changeme_owner', true) }}"
+    role_attr_flags: "CREATEDB,NOSUPERUSER"
+    db: "{{ app_database }}"
+    priv: "ALL"
+    
+  - name: "app_user"
+    password: "{{ lookup('env', 'APP_USER_PASSWORD') | default('changeme_user', true) }}"
+    role_attr_flags: "NOSUPERUSER,NOCREATEDB"
+    db: "{{ app_database }}"
+    priv: "CONNECT"
+    
+  - name: "app_readonly"
+    password: "{{ lookup('env', 'APP_READONLY_PASSWORD') | default('changeme_readonly', true) }}"
+    role_attr_flags: "NOSUPERUSER,NOCREATEDB"
+    db: "{{ app_database }}"
+    priv: "CONNECT"
+
+# Roles
+postgres_roles:
+  - name: "read_only_role"
+    state: present
+  - name: "read_write_role"
+    state: present
+
+# Security settings
+postgres_ssl: "off"  # Set to 'on' for production
+postgres_password_encryption: "scram-sha-256"
+
+# Backup settings
+postgres_backup_dir: "/opt/homebrew/var/backups/postgres"
+
+
+

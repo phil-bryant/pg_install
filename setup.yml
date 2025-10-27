@@ -1,0 +1,345 @@
+---
+- name: Setup PostgreSQL on macOS
+  hosts: localhost
+  gather_facts: yes
+  vars_files:
+    - vars/postgres.yml
+  
+  tasks:
+    - name: Check if Homebrew is installed (command approach)
+      shell: command -v brew
+      register: homebrew_check
+      failed_when: false
+      changed_when: false
+      
+    - name: Fail if Homebrew is not installed
+      fail:
+        msg: "Homebrew is not installed. Please install it from https://brew.sh"
+      when: homebrew_check.rc != 0
+    
+    # ==========================================
+    # INSTALLATION PHASE
+    # ==========================================
+    
+    - name: Check if PostgreSQL {{ postgres_version }} is already installed
+      shell: brew list --formula | grep -q "^{{ postgres_formula }}$"
+      register: postgres_installed
+      failed_when: false
+      changed_when: false
+      
+    - name: Install PostgreSQL {{ postgres_version }} via Homebrew
+      homebrew:
+        name: "{{ postgres_formula }}"
+        state: present
+      when: postgres_installed.rc != 0
+      register: postgres_install_result
+      
+    - name: Install Python PostgreSQL adapter (psycopg2)
+      pip:
+        name: psycopg2-binary
+        state: present
+        executable: pip3
+      ignore_errors: yes
+      
+    - name: Create log directory
+      file:
+        path: "{{ postgres_log_dir }}"
+        state: directory
+        mode: '0755'
+        
+    - name: Create backup directory
+      file:
+        path: "{{ postgres_backup_dir }}"
+        state: directory
+        mode: '0755'
+    
+    # ==========================================
+    # SERVICE MANAGEMENT
+    # ==========================================
+    
+    - name: Check if PostgreSQL service is running
+      shell: brew services list | grep "{{ postgres_service_name }}" | grep -q "started"
+      register: postgres_running
+      failed_when: false
+      changed_when: false
+      
+    - name: Initialize PostgreSQL database (if needed)
+      shell: initdb -D {{ postgres_data_dir }}
+      when: postgres_install_result.changed | default(false)
+      ignore_errors: yes
+      
+    - name: Start PostgreSQL service
+      shell: brew services start {{ postgres_service_name }}
+      when: postgres_running.rc != 0
+      register: postgres_started
+      
+    - name: Wait for PostgreSQL to be ready
+      wait_for:
+        port: "{{ postgres_port }}"
+        delay: 2
+        timeout: 30
+      when: postgres_started.changed | default(false)
+      
+    - name: Pause to ensure PostgreSQL is fully started
+      pause:
+        seconds: 3
+      when: postgres_started.changed | default(false)
+    
+    # ==========================================
+    # INITIAL CONFIGURATION (PostgreSQL Settings)
+    # ==========================================
+    
+    - name: Update postgresql.conf - listen_addresses
+      lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: '^#?listen_addresses\s*='
+        line: "listen_addresses = '{{ postgres_listen_addresses }}'"
+        backup: yes
+      notify: restart postgresql
+      
+    - name: Update postgresql.conf - port
+      lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: '^#?port\s*='
+        line: "port = {{ postgres_port }}"
+      notify: restart postgresql
+      
+    - name: Update postgresql.conf - max_connections
+      lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: '^#?max_connections\s*='
+        line: "max_connections = {{ postgres_max_connections }}"
+      notify: restart postgresql
+      
+    - name: Update postgresql.conf - password_encryption
+      lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: '^#?password_encryption\s*='
+        line: "password_encryption = {{ postgres_password_encryption }}"
+      notify: restart postgresql
+      
+    - name: Update postgresql.conf - logging
+      blockinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        marker: "# {mark} ANSIBLE MANAGED - LOGGING"
+        block: |
+          log_destination = 'stderr'
+          logging_collector = on
+          log_directory = '{{ postgres_log_dir }}'
+          log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+          log_rotation_age = 1d
+          log_rotation_size = 10MB
+          log_line_prefix = '%m [%p] %u@%d '
+          log_timezone = 'UTC'
+        backup: yes
+      notify: restart postgresql
+      
+    - name: Backup original pg_hba.conf
+      copy:
+        src: "{{ postgres_data_dir }}/pg_hba.conf"
+        dest: "{{ postgres_data_dir }}/pg_hba.conf.original"
+        remote_src: yes
+        force: no
+        
+    - name: Configure pg_hba.conf with TRUST for initial setup
+      copy:
+        dest: "{{ postgres_data_dir }}/pg_hba.conf"
+        content: |
+          # TYPE  DATABASE        USER            ADDRESS                 METHOD
+          # Temporary trust authentication for initial setup
+          
+          # "local" is for Unix domain socket connections only
+          local   all             all                                     trust
+          
+          # IPv4 local connections:
+          host    all             all             127.0.0.1/32            trust
+          
+          # IPv6 local connections:
+          host    all             all             ::1/128                 trust
+        backup: yes
+      notify: restart postgresql
+    
+    # ==========================================
+    # DATABASE AND USER CREATION
+    # ==========================================
+    
+    - name: Flush handlers to apply configuration changes
+      meta: flush_handlers
+      
+    - name: Wait for PostgreSQL to be ready after restart
+      wait_for:
+        port: "{{ postgres_port }}"
+        delay: 2
+        timeout: 30
+        
+    - name: Create application database
+      postgresql_db:
+        name: "{{ app_database }}"
+        encoding: 'UTF-8'
+        lc_collate: 'en_US.UTF-8'
+        lc_ctype: 'en_US.UTF-8'
+        template: 'template0'
+        state: present
+        login_user: "{{ ansible_user_id }}"
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGHOST: localhost
+        PGPORT: "{{ postgres_port }}"
+        
+    - name: Create PostgreSQL roles
+      postgresql_user:
+        name: "{{ item.name }}"
+        state: "{{ item.state }}"
+        login_user: "{{ ansible_user_id }}"
+        login_db: postgres
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGHOST: localhost
+        PGPORT: "{{ postgres_port }}"
+      loop: "{{ postgres_roles }}"
+      
+    - name: Create PostgreSQL users
+      postgresql_user:
+        name: "{{ item.name }}"
+        password: "{{ item.password }}"
+        role_attr_flags: "{{ item.role_attr_flags }}"
+        state: present
+        login_user: "{{ ansible_user_id }}"
+        login_db: postgres
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGHOST: localhost
+        PGPORT: "{{ postgres_port }}"
+      loop: "{{ postgres_users }}"
+      no_log: true
+      
+    - name: Grant database privileges to users
+      postgresql_privs:
+        database: "{{ item.db }}"
+        roles: "{{ item.name }}"
+        type: database
+        privs: "{{ item.priv }}"
+        login_user: "{{ ansible_user_id }}"
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGHOST: localhost
+        PGPORT: "{{ postgres_port }}"
+      loop: "{{ postgres_users }}"
+      when: item.priv is defined
+    
+    # ==========================================
+    # SCHEMA AND TABLE INITIALIZATION
+    # ==========================================
+    
+    - name: Check if SQL initialization files exist
+      stat:
+        path: "{{ item }}"
+      register: sql_files_check
+      loop:
+        - sql/init_db.sql
+        - sql/users_roles.sql
+        - sql/sample_data.sql
+        
+    - name: Execute database initialization SQL
+      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/init_db.sql"
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGPASSWORD: "{{ postgres_users[0].password }}"
+      when: sql_files_check.results[0].stat.exists
+      register: init_db_result
+      changed_when: true
+      
+    - name: Execute users and roles SQL
+      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/users_roles.sql"
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGPASSWORD: "{{ postgres_users[0].password }}"
+      when: sql_files_check.results[1].stat.exists
+      register: users_roles_result
+      changed_when: true
+      
+    - name: Execute sample data SQL
+      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/sample_data.sql"
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGPASSWORD: "{{ postgres_users[0].password }}"
+      when: sql_files_check.results[2].stat.exists
+      register: sample_data_result
+      changed_when: true
+    
+    # ==========================================
+    # APPLY SECURE AUTHENTICATION
+    # ==========================================
+    
+    - name: Configure pg_hba.conf for secure authentication
+      copy:
+        dest: "{{ postgres_data_dir }}/pg_hba.conf"
+        content: |
+          # TYPE  DATABASE        USER            ADDRESS                 METHOD
+          
+          # "local" is for Unix domain socket connections only
+          local   all             all                                     scram-sha-256
+          
+          # IPv4 local connections:
+          host    all             all             127.0.0.1/32            scram-sha-256
+          
+          # IPv6 local connections:
+          host    all             all             ::1/128                 scram-sha-256
+          
+          # Reject all other connections
+          host    all             all             0.0.0.0/0               reject
+        backup: yes
+      notify: restart postgresql
+    
+    - name: Flush handlers to apply secure authentication
+      meta: flush_handlers
+      
+    - name: Wait for PostgreSQL to be ready after final restart
+      wait_for:
+        port: "{{ postgres_port }}"
+        delay: 2
+        timeout: 30
+    
+    # ==========================================
+    # FINAL VERIFICATION
+    # ==========================================
+    
+    - name: Verify PostgreSQL is running
+      shell: brew services list | grep "{{ postgres_service_name }}"
+      register: final_status
+      changed_when: false
+      
+    - name: Display PostgreSQL status
+      debug:
+        msg: "{{ final_status.stdout }}"
+        
+    - name: Get PostgreSQL version
+      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d postgres -t -A -c 'SELECT version();'"
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGPASSWORD: "{{ postgres_users[0].password }}"
+      register: pg_version
+      changed_when: false
+      
+    - name: Display success message
+      debug:
+        msg:
+          - "=========================================="
+          - "PostgreSQL Setup Complete!"
+          - "=========================================="
+          - "Version: {{ pg_version.stdout | trim }}"
+          - "Database: {{ app_database }}"
+          - "Port: {{ postgres_port }}"
+          - "Users created: {{ postgres_users | map(attribute='name') | list | join(', ') }}"
+          - ""
+          - "Connect with: /opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U app_owner -d {{ app_database }}"
+          - "(You'll need to set PGPASSWORD or enter the password when prompted)"
+          - "=========================================="
+  
+  handlers:
+    - name: restart postgresql
+      shell: brew services restart {{ postgres_service_name }}
+      listen: restart postgresql
+
+
+

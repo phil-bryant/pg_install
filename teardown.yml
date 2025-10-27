@@ -1,0 +1,194 @@
+---
+- name: Teardown PostgreSQL on macOS
+  hosts: localhost
+  gather_facts: yes
+  vars_files:
+    - vars/postgres.yml
+  
+  vars_prompt:
+    - name: confirm_teardown
+      prompt: "This will COMPLETELY REMOVE PostgreSQL and ALL DATA. Type 'yes' to confirm"
+      private: no
+      
+  tasks:
+    - name: Verify confirmation
+      fail:
+        msg: "Teardown cancelled. You must type 'yes' to confirm."
+      when: confirm_teardown != 'yes'
+      
+    - name: Display warning
+      debug:
+        msg:
+          - "=========================================="
+          - "WARNING: Beginning PostgreSQL Teardown"
+          - "=========================================="
+          - "This will remove:"
+          - "  - PostgreSQL service"
+          - "  - All databases and data"
+          - "  - PostgreSQL installation"
+          - "  - Configuration files"
+          - "  - Log files"
+          - "=========================================="
+    
+    # ==========================================
+    # BACKUP BEFORE DESTRUCTION (Optional)
+    # ==========================================
+    
+    - name: Create final backup of all databases
+      block:
+        - name: Create backup timestamp directory
+          file:
+            path: "{{ postgres_backup_dir }}/final_backup_{{ ansible_date_time.epoch }}"
+            state: directory
+            mode: '0755'
+          register: backup_dir
+          
+        - name: Backup application database
+          shell: |
+            /opt/homebrew/opt/postgresql@15/bin/pg_dump -h localhost -p {{ postgres_port }} {{ app_database }} > {{ backup_dir.path }}/{{ app_database }}_final.sql
+          environment:
+            PGUSER: "{{ postgres_users[0].name }}"
+            PGPASSWORD: "{{ postgres_users[0].password }}"
+          ignore_errors: yes
+          
+        - name: Display backup location
+          debug:
+            msg: "Final backup saved to: {{ backup_dir.path }}"
+      when: postgres_backup_dir is defined
+      ignore_errors: yes
+    
+    # ==========================================
+    # STOP SERVICE
+    # ==========================================
+    
+    - name: Check if PostgreSQL service is running
+      shell: brew services list | grep "{{ postgres_service_name }}" | grep -q "started"
+      register: postgres_running
+      failed_when: false
+      changed_when: false
+      
+    - name: Stop PostgreSQL service
+      shell: brew services stop {{ postgres_service_name }}
+      when: postgres_running.rc == 0
+      register: postgres_stopped
+      
+    - name: Wait for PostgreSQL to stop
+      wait_for:
+        port: "{{ postgres_port }}"
+        state: stopped
+        timeout: 30
+      when: postgres_stopped.changed | default(false)
+      ignore_errors: yes
+      
+    - name: Force kill any remaining PostgreSQL processes
+      shell: pkill -9 postgres
+      ignore_errors: yes
+    
+    # ==========================================
+    # REMOVE DATA AND CONFIGURATION
+    # ==========================================
+    
+    - name: Remove PostgreSQL data directory
+      file:
+        path: "{{ postgres_data_dir }}"
+        state: absent
+      ignore_errors: yes
+      
+    - name: Remove PostgreSQL configuration directory
+      file:
+        path: "{{ postgres_conf_dir }}"
+        state: absent
+      ignore_errors: yes
+      
+    - name: Remove PostgreSQL log directory
+      file:
+        path: "{{ postgres_log_dir }}"
+        state: absent
+      ignore_errors: yes
+      
+    - name: List backup directory size
+      shell: du -sh {{ postgres_backup_dir }} 2>/dev/null || echo "No backups found"
+      register: backup_size
+      changed_when: false
+      ignore_errors: yes
+      
+    - name: Display backup information
+      debug:
+        msg: "Backup directory: {{ backup_size.stdout }}"
+      when: backup_size.stdout is defined
+      
+    - name: Remove backup directory (optional - commented out for safety)
+      debug:
+        msg: "Backups preserved at: {{ postgres_backup_dir }}. Remove manually if desired."
+    
+    # Uncomment to remove backups:
+    # - name: Remove PostgreSQL backup directory
+    #   file:
+    #     path: "{{ postgres_backup_dir }}"
+    #     state: absent
+    
+    # ==========================================
+    # UNINSTALL POSTGRESQL
+    # ==========================================
+    
+    - name: Check if PostgreSQL {{ postgres_version }} is installed
+      shell: brew list --formula | grep -q "^{{ postgres_formula }}$"
+      register: postgres_installed
+      failed_when: false
+      changed_when: false
+      
+    - name: Uninstall PostgreSQL {{ postgres_version }}
+      homebrew:
+        name: "{{ postgres_formula }}"
+        state: absent
+      when: postgres_installed.rc == 0
+      
+    - name: Remove any remaining PostgreSQL files in Homebrew directories
+      shell: |
+        rm -rf /opt/homebrew/var/postgresql@{{ postgres_version }}
+        rm -rf /opt/homebrew/etc/postgresql@{{ postgres_version }}
+        rm -rf /opt/homebrew/var/log/postgresql@{{ postgres_version }}
+        rm -rf /usr/local/var/postgres@{{ postgres_version }}
+        rm -rf /usr/local/etc/postgres@{{ postgres_version }}
+        rm -rf /usr/local/var/log/postgres@{{ postgres_version }}
+      ignore_errors: yes
+      
+    - name: Clean up Homebrew
+      shell: brew cleanup {{ postgres_formula }}
+      ignore_errors: yes
+    
+    # ==========================================
+    # VERIFICATION
+    # ==========================================
+    
+    - name: Verify PostgreSQL is removed
+      shell: brew list --formula | grep "^{{ postgres_formula }}$"
+      register: verify_removal
+      failed_when: false
+      changed_when: false
+      
+    - name: Check if port is free
+      wait_for:
+        port: "{{ postgres_port }}"
+        state: stopped
+        timeout: 5
+      ignore_errors: yes
+      
+    - name: Display teardown completion message
+      debug:
+        msg:
+          - "=========================================="
+          - "PostgreSQL Teardown Complete!"
+          - "=========================================="
+          - "PostgreSQL {{ postgres_version }} has been removed"
+          - "Service: Stopped and removed"
+          - "Data: Removed"
+          - "Config: Removed"
+          - "Logs: Removed"
+          - "Backups: Preserved at {{ postgres_backup_dir }}"
+          - ""
+          - "Status: {{ 'Successfully removed' if verify_removal.rc != 0 else 'WARNING: PostgreSQL may still be installed' }}"
+          - "=========================================="
+
+
+

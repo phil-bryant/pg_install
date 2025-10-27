@@ -1,0 +1,36 @@
+# Environment variables
+.env
+
+# Ansible
+*.retry
+.ansible/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Backups
+backups/
+*.sql.backup
+*.sql.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+*-venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+
+
