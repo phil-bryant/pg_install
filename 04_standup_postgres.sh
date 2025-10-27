@@ -64,8 +64,6 @@ echo ""
 echo "If not set, default passwords will be used."
 echo "============================================================"
 echo ""
-read -p "Press Enter to continue with PostgreSQL setup..."
-echo ""
 
 # Run the Ansible playbook
 echo "Running PostgreSQL setup playbook..."
@@ -78,10 +76,10 @@ if ansible-playbook setup.yml; then
     echo "============================================================"
     echo ""
     echo "You can now connect to PostgreSQL with:"
-    echo "  PGPASSWORD=changeme_owner /opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p 5432 -U app_owner -d myapp_db"
+    echo "  PAGER='' PGPASSWORD=changeme_owner /opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p 5432 -U app_owner -d myapp_db"
     echo ""
     echo "Or use the psql alias if PostgreSQL bin is in your PATH:"
-    echo "  PGPASSWORD=changeme_owner psql -h localhost -p 5432 -U app_owner -d myapp_db"
+    echo "  PAGER='' PGPASSWORD=changeme_owner psql -h localhost -p 5432 -U app_owner -d myapp_db"
     echo ""
 else
     echo ""
