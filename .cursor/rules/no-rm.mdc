@@ -1,0 +1,140 @@
+---
+alwaysApply: true
+---
+# 🚨 NEVER DELETE FILES - Universal Safety Rule
+
+## Rule
+**NEVER use the `rm` command in ANY context: terminal commands, shell scripts, source code, test cases, or build scripts.**
+**This includes all variants: `rm`, `rm -f`, `rm -rf`, `rm -r`, and any other combination.**
+
+## Why - The Critical Dangers
+
+### 💀 **Irreversible Data Loss**
+- `rm` permanently deletes files with no recovery mechanism
+- No "undo" button, no trash bin, no second chances
+- One typo in a path can destroy entire projects
+
+### ✅ **The Safe Alternative: Move to Trash**
+**Never delete - always move to Trash with timestamps for recovery.** This provides safety and auditability.
+
+### 🧪 **Test Case Catastrophes**
+```bash
+# ❌ DANGEROUS: Meant to clean test dir but deleted everything
+rm -rf *.tiff  # Depended on test being in a particular /tmp directory but the above cd was removed
+               # Accidentally recursively removed all tiff files from user's home directory
+# Result: DELETED ALL user files outside of project scope
+
+# ❌ DANGEROUS: Even "safe" patterns can go wrong
+rm -rf "$test_dir"/*  # What if test_dir is wrong or empty?
+```
+
+### 🚨 **Development Environment Risks**
+```bash
+# ❌ DANGEROUS: Common dangerous patterns
+rm -rf build/*          # Easy to accidentally do rm -rf build *
+rm -f *.tmp             # Easy to accidentally do rm -f * .tmp
+rm -rf node_modules/*   # Easy to accidentally do rm -rf node_modules *
+```
+
+### 🔒 **Security & Audit Risks**
+- No logging of what was deleted
+- No ability to recover
+- Silent failures make debugging impossible
+
+## Where This Rule Applies: **EVERYWHERE**
+
+### ❌ **Terminal Commands**
+```bash
+# NEVER DO THIS
+rm -rf /some/important/data
+rm -f *.log
+find . -name "*.tmp" -delete  # Even find -delete is risky
+```
+
+### ❌ **Shell Scripts & Build Scripts**
+```bash
+#!/bin/bash
+# ❌ DANGEROUS - Never include in any script
+cleanup() {
+    rm -rf "$1"/*  # Path errors here are catastrophic
+}
+```
+
+### ❌ **Source Code (Any Language)**
+```python
+# ❌ DANGEROUS - Never use in Python
+import os
+os.system("rm -rf /tmp/cache/*")  # Security risk + unreliable
+
+# ❌ DANGEROUS - Never use in Node.js
+const { execSync } = require('child_process');
+execSync('rm -rf dist/*');  # Path errors destroy projects
+```
+
+### ❌ **Test Cases (ALSO CRITICAL!)**
+```bash
+# ❌ DANGEROUS - Test cleanup gone wrong
+def test_something(self):
+    test_dir = "/tmp/my_test"
+    # Later in cleanup...
+    subprocess.run(["rm", "-rf", test_dir])  # Easy to typo the path!
+
+    # ❌ EVEN WORSE - Shell injection vulnerable
+    os.system(f"rm -rf {user_provided_path}")  # SECURITY RISK
+```
+
+### ❌ **Makefile & Build Systems**
+```makefile
+# ❌ DANGEROUS - Never use in Makefiles
+clean:
+	rm -rf build/*    # Easy to accidentally do: rm -rf build *
+	rm -f *.o         # Easy to accidentally do: rm -f *
+```
+
+## ✅ **Safe Alternative Example**
+
+### **Makefile: Use Safe Binary Management**
+```makefile
+# ✅ SAFE: Universal pattern for any project
+compile:
+    @if [ -f bin/myapp ]; then \
+        timestamp=$$(date +%Y-%m-%d-%H.%M.%S); \
+        trash_dir="$$HOME/.Trash/myapp_bin_$$timestamp"; \
+        mkdir -p "$$trash_dir"; \
+        echo "Moving previous binary to ~/.Trash..."; \
+        if ! mv bin/myapp "$$trash_dir/myapp"; then \
+            exit 1; \
+        fi; \
+    fi;
+    # Then safely compile new binary
+    $(CC) $(CFLAGS) source/main.m -o bin/myapp
+
+# ✅ SAFE: Universal principles for any project
+# 1. Move to Trash with timestamp (never delete)
+# 2. Check operations succeed before proceeding
+# 3. Preserve old versions for recovery
+# 4. Use mkdir -p for safe directory creation
+# 5. Replace myapp with your project's actual name
+```
+
+## ✅ **Verification Checklist**
+
+Before any code/script/test change:
+- [ ] **No `rm` commands** in any form (`rm`, `rm -f`, `rm -rf`, etc.)
+- [ ] **No `find . -delete`** or similar dangerous operations
+- [ ] **Proper error handling** for file operations
+- [ ] **Test cleanup uses safe APIs and moves files**
+- [ ] **Build scripts use safe patterns of moving files**
+- [ ] **All paths are absolute and validated** before operations
+- [ ] **Follows Makefile pattern**: Move to Trash with timestamps (never delete permanently)
+
+## 🔍 **Detection & Prevention**
+
+This rule will flag:
+- Any occurrence of `rm` in source code
+- Any occurrence of `rm` in shell scripts
+- Any occurrence of `rm` in test files
+- Any occurrence of `find . -delete` patterns
+- File deletion patterns in any language
+
+**REMEMBER: The cost of preventing `rm` usage is negligible compared to the cost of data loss recovery.**

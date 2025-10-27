@@ -34,28 +34,40 @@
     # BACKUP BEFORE DESTRUCTION (Optional)
     # ==========================================
     
+    - name: Check if PostgreSQL is installed for backup
+      stat:
+        path: "/opt/homebrew/opt/{{ postgres_formula }}/bin/pg_dump"
+      register: pg_dump_exists
+    
+    - name: Check if PostgreSQL service is running for backup
+      shell: brew services list | grep "{{ postgres_service_name }}" | grep -q "started"
+      register: postgres_running_for_backup
+      failed_when: false
+      changed_when: false
+      when: pg_dump_exists.stat.exists
+    
     - name: Create final backup of all databases
       block:
         - name: Create backup timestamp directory
           file:
             path: "{{ postgres_backup_dir }}/final_backup_{{ ansible_date_time.epoch }}"
             state: directory
-            mode: '0755'
+            mode: '0770'
           register: backup_dir
           
         - name: Backup application database
           shell: |
-            /opt/homebrew/opt/postgresql@15/bin/pg_dump -h localhost -p {{ postgres_port }} {{ app_database }} > {{ backup_dir.path }}/{{ app_database }}_final.sql
+            /opt/homebrew/opt/{{ postgres_formula }}/bin/pg_dump -h localhost -p {{ postgres_port }} {{ app_database }} > {{ backup_dir.path }}/{{ app_database }}_final.sql
           environment:
             PGUSER: "{{ postgres_users[0].name }}"
             PGPASSWORD: "{{ postgres_users[0].password }}"
-          ignore_errors: yes
           
         - name: Display backup location
           debug:
             msg: "Final backup saved to: {{ backup_dir.path }}"
-      when: postgres_backup_dir is defined
-      ignore_errors: yes
+      when: 
+        - pg_dump_exists.stat.exists
+        - postgres_running_for_backup.rc == 0
     
     # ==========================================
     # STOP SERVICE

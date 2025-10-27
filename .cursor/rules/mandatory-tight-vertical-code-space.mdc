@@ -1,0 +1,334 @@
+---
+alwaysApply: true
+---
+# Mandatory Tight Vertical Code Space
+
+## Overview
+AI-generated code must respect human vertical screen real estate. Laptop screens typically show 10-30 lines of code comfortably. Code that exceeds this creates cognitive overhead requiring constant scrolling and context switching.
+
+## Core Principles
+
+### 1. Vertical Density Rules
+- **Target density**: Aim for meaningful operation on every line of code
+- **No artificial line breaks**: Don't split simple expressions across multiple lines unless necessary for readability
+- **Compact conditionals**: Use single-line if statements when the condition and action are simple
+- **Minimize blank lines**: Only use blank lines to separate logical sections, not decorative spacing
+
+### 2. Comment Constraints
+- **Essential comments only**: Comments must provide unique value that code cannot convey
+- **No redundant comments**: Don't comment what the code obviously does (e.g., `// increment counter` for `i++`)
+- **No section banners**: Avoid ASCII art, decorative comments, or elaborate comment blocks
+- **Inline over separate**: Prefer inline comments over separate comment lines when possible
+
+### 3. Function and Block Structure
+- **Compact functions**: Functions should fit within 10 lines when possible and absolutely no more than 30
+- **Early returns**: Use early returns to avoid nested if statements
+- **Compound assignments**: Use `+=`, `*=`, etc. instead of separate operation lines
+- **Method chaining**: Chain method calls when they improve readability and reduce lines
+
+### 4. Variable and Declaration Optimization
+- **Combine declarations**: Group related variable declarations
+- **Inline initialization**: Initialize variables where they're declared
+- **Avoid intermediate variables**: Don't create variables for simple transformations unless they improve clarity
+- **Destructuring**: Use destructuring assignment to reduce multiple declaration lines
+
+## Examples
+
+### ❌ Before (AI-Verbose Style)
+```javascript
+// Function to calculate the total price
+function calculateTotalPrice(items) {
+    // Initialize the total variable
+    let total = 0;
+
+    // Loop through each item in the array
+    for (let i = 0; i < items.length; i++) {
+        // Get the current item
+        const item = items[i];
+
+        // Calculate the price with tax
+        const priceWithTax = item.price * 1.1;
+
+        // Add to the running total
+        total += priceWithTax;
+    }
+
+    // Return the final total
+    return total;
+}
+```
+
+### ✅ After (Human-Friendly Style)
+```javascript
+function calculateTotalPrice(items) {
+    let total = 0;
+    for (let i = 0; i < items.length; i++) {
+        total += items[i].price * 1.1;
+    }
+    return total;
+}
+```
+
+### ❌ Before (Verbose Object Creation)
+```javascript
+// Create a new user object
+const user = {
+    // Set the user ID
+    id: 123,
+
+    // Set the user name
+    name: 'John Doe',
+
+    // Set the user email
+    email: 'john@example.com',
+
+    // Set the active status
+    isActive: true
+};
+```
+
+### ✅ After (Compact Object)
+```javascript
+const user = {
+    id: 123,
+    name: 'John Doe',
+    email: 'john@example.com',
+    isActive: true
+};
+```
+
+## Implementation Guidelines for any language (javascript used merely as an example)
+
+### For Loops and Iterations
+```javascript
+// ❌ Verbose loop
+for (let i = 0; i < array.length; i++) {
+    const element = array[i];
+    console.log(element);
+}
+
+// ✅ Compact loop
+for (let i = 0; i < array.length; i++) console.log(array[i]);
+```
+
+### For Conditionals
+```javascript
+// ❌ Verbose conditional
+if (condition === true) {
+    return 'success';
+} else {
+    return 'failure';
+}
+
+// ✅ Compact conditional
+return condition ? 'success' : 'failure';
+```
+
+### For Object Methods
+```javascript
+// ❌ Verbose method definitions
+const utils = {
+    // Helper function to format currency
+    formatCurrency: function(amount) {
+        return '$' + amount.toFixed(2);
+    },
+
+    // Helper function to validate email
+    validateEmail: function(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+};
+
+// ✅ Compact method definitions
+const utils = {
+    formatCurrency(amount) { return '$' + amount.toFixed(2); },
+    validateEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+};
+```
+
+## Metrics to Maintain
+- **Functions**: Target < 10 lines, max 30 lines
+- **Comments**: < 10% of total lines
+- **Blank lines**: < 5% of total lines
+
+Always prioritize **mechanical compactness over what you typically write**. The goal is to maximize understanding within vertical constraints.
+# Mandatory Tight Vertical Code Space
+
+## Overview
+AI-generated code must respect human vertical screen real estate. Laptop screens typically show 10-30 lines of code comfortably. Code that exceeds this creates cognitive overhead requiring constant scrolling and context switching.
+
+## Core Principles
+
+### 1. Vertical Density Rules
+- **Target density**: Aim for meaningful operation on every line of code
+- **No artificial line breaks**: Don't split simple expressions across multiple lines unless necessary for readability
+- **Compact conditionals**: Use single-line if statements when the condition and action are simple
+- **Minimize blank lines**: Only use blank lines to separate logical sections, not decorative spacing
+
+### 2. Comment Constraints
+- **Essential comments only**: Comments must provide unique value that code cannot convey
+- **No redundant comments**: Don't comment what the code obviously does (e.g., `// increment counter` for `i++`)
+- **No section banners**: Avoid ASCII art, decorative comments, or elaborate comment blocks
+- **Inline over separate**: Prefer inline comments over separate comment lines when possible
+
+### 3. Function and Block Structure
+- **Compact functions**: Functions should fit within 10 lines when possible and absolutely no more than 30
+- **Early returns**: Use early returns to avoid nested if statements
+- **Compound assignments**: Use `+=`, `*=`, etc. instead of separate operation lines
+- **Method chaining**: Chain method calls when they improve readability and reduce lines
+
+### 4. Variable and Declaration Optimization
+- **Combine declarations**: Group related variable declarations
+- **Inline initialization**: Initialize variables where they're declared
+- **Avoid intermediate variables**: Don't create variables for simple transformations unless they improve clarity
+- **Destructuring**: Use destructuring assignment to reduce multiple declaration lines
+
+## Examples
+
+### ❌ Before (AI-Verbose Style)
+```javascript
+// Function to calculate the total price
+function calculateTotalPrice(items) {
+    // Initialize the total variable
+    let total = 0;
+
+    // Loop through each item in the array
+    for (let i = 0; i < items.length; i++) {
+        // Get the current item
+        const item = items[i];
+
+        // Calculate the price with tax
+        const priceWithTax = item.price * 1.1;
+
+        // Add to the running total
+        total += priceWithTax;
+    }
+
+    // Return the final total
+    return total;
+}
+```
+
+### ✅ After (Human-Friendly Style)
+```javascript
+function calculateTotalPrice(items) {
+    let total = 0;
+    for (let i = 0; i < items.length; i++) {
+        total += items[i].price * 1.1;
+    }
+    return total;
+}
+```
+
+### ❌ Before (Verbose Object Creation)
+```javascript
+// Create a new user object
+const user = {
+    // Set the user ID
+    id: 123,
+
+    // Set the user name
+    name: 'John Doe',
+
+    // Set the user email
+    email: 'john@example.com',
+
+    // Set the active status
+    isActive: true
+};
+```
+
+### ✅ After (Compact Object)
+```javascript
+const user = {
+    id: 123,
+    name: 'John Doe',
+    email: 'john@example.com',
+    isActive: true
+};
+```
+
+## Implementation Guidelines
+
+### For Loops and Iterations
+```javascript
+// ❌ Verbose loop
+for (let i = 0; i < array.length; i++) {
+    const element = array[i];
+    console.log(element);
+}
+
+// ✅ Compact loop
+for (let i = 0; i < array.length; i++) console.log(array[i]);
+```
+
+### For Conditionals
+```javascript
+// ❌ Verbose conditional
+if (condition === true) {
+    return 'success';
+} else {
+    return 'failure';
+}
+
+// ✅ Compact conditional
+return condition ? 'success' : 'failure';
+```
+
+### For Object Methods
+```javascript
+// ❌ Verbose method definitions
+const utils = {
+    // Helper function to format currency
+    formatCurrency: function(amount) {
+        return '$' + amount.toFixed(2);
+    },
+
+    // Helper function to validate email
+    validateEmail: function(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+};
+
+// ✅ Compact method definitions
+const utils = {
+    formatCurrency(amount) { return '$' + amount.toFixed(2); },
+    validateEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+};
+```
+
+## Language-Specific Optimizations
+
+### JavaScript/TypeScript
+- Use arrow functions for single-expression functions
+- Leverage optional chaining (`?.`) and nullish coalescing (`??`)
+- Use template literals efficiently
+- Prefer `for...of` over traditional for loops when index isn't needed
+
+### Python
+- Use list comprehensions instead of multi-line loops
+- Leverage conditional expressions (`x if condition else y`)
+- Use tuple unpacking and multiple assignment
+- Prefer `with` statements for resource management
+
+### CSS
+- Group related properties
+- Use shorthand properties (margin, padding, border)
+- Combine selectors when possible
+- Minimize nested rules
+
+## Metrics to Maintain
+- **Functions**: Target < 10 lines, max 30 lines
+- **Files**: Should be readable without scrolling when possible
+- **Comments**: < 10% of total lines
+- **Blank lines**: < 5% of total lines
+
+## When to Break These Rules
+- **Complex algorithms**: May require more lines for clarity
+- **Public APIs**: May need more documentation
+- **Legacy code compatibility**: May require existing patterns
+- **Performance-critical sections**: May need detailed comments
+
+Always prioritize **mechanical compactness over what you typically write**. The goal is to maximize understanding within vertical constraints.

@@ -43,20 +43,13 @@ if [ -n "$VIRTUAL_ENV" ]; then
     exit 1
 fi
 
-# Remove existing venv if it exists
+# Check if venv already exists
 if [ -d "$VENV_DIR" ]; then
-    echo "Removing existing virtual environment..."
-    chmod -R u+w "$VENV_DIR" || true
-    rm -rf "$VENV_DIR" || true
-    
-    # If removal failed, try again
-    if [ -d "$VENV_DIR" ]; then
-        echo "Retrying removal..."
-        rm -rf "$VENV_DIR"
-    fi
-    
-    echo "✓ Removed old venv"
+    echo "✓ Virtual environment already exists: $VENV_DIR"
     echo ""
+    echo "To activate the virtual environment, run:"
+    echo "  activate"
+    exit 0
 fi
 
 echo "Creating virtual environment..."

@@ -45,13 +45,13 @@
       file:
         path: "{{ postgres_log_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0770'
         
     - name: Create backup directory
       file:
         path: "{{ postgres_backup_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0770'
     
     # ==========================================
     # SERVICE MANAGEMENT
@@ -63,10 +63,16 @@
       failed_when: false
       changed_when: false
       
+    - name: Check if PostgreSQL data directory exists
+      stat:
+        path: "{{ postgres_data_dir }}/PG_VERSION"
+      register: postgres_data_exists
+      
     - name: Initialize PostgreSQL database (if needed)
-      shell: initdb -D {{ postgres_data_dir }}
-      when: postgres_install_result.changed | default(false)
-      ignore_errors: yes
+      shell: /opt/homebrew/opt/{{ postgres_formula }}/bin/initdb -D {{ postgres_data_dir }}
+      when: 
+        - postgres_install_result.changed | default(false)
+        - not postgres_data_exists.stat.exists
       
     - name: Start PostgreSQL service
       shell: brew services start {{ postgres_service_name }}
@@ -241,7 +247,7 @@
         - sql/sample_data.sql
         
     - name: Execute database initialization SQL
-      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/init_db.sql"
+      shell: "/opt/homebrew/opt/{{ postgres_formula }}/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/init_db.sql"
       become_user: "{{ ansible_user_id }}"
       environment:
         PGPASSWORD: "{{ postgres_users[0].password }}"
@@ -250,7 +256,7 @@
       changed_when: true
       
     - name: Execute users and roles SQL
-      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/users_roles.sql"
+      shell: "/opt/homebrew/opt/{{ postgres_formula }}/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/users_roles.sql"
       become_user: "{{ ansible_user_id }}"
       environment:
         PGPASSWORD: "{{ postgres_users[0].password }}"
@@ -259,7 +265,7 @@
       changed_when: true
       
     - name: Execute sample data SQL
-      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/sample_data.sql"
+      shell: "/opt/homebrew/opt/{{ postgres_formula }}/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d {{ app_database }} -f sql/sample_data.sql"
       become_user: "{{ ansible_user_id }}"
       environment:
         PGPASSWORD: "{{ postgres_users[0].password }}"
@@ -314,7 +320,7 @@
         msg: "{{ final_status.stdout }}"
         
     - name: Get PostgreSQL version
-      shell: "/opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d postgres -t -A -c 'SELECT version();'"
+      shell: "/opt/homebrew/opt/{{ postgres_formula }}/bin/psql -h localhost -p {{ postgres_port }} -U {{ postgres_users[0].name }} -d postgres -t -A -c 'SELECT version();'"
       become_user: "{{ ansible_user_id }}"
       environment:
         PGPASSWORD: "{{ postgres_users[0].password }}"
@@ -332,7 +338,7 @@
           - "Port: {{ postgres_port }}"
           - "Users created: {{ postgres_users | map(attribute='name') | list | join(', ') }}"
           - ""
-          - "Connect with: /opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p {{ postgres_port }} -U app_owner -d {{ app_database }}"
+          - "Connect with: /opt/homebrew/opt/{{ postgres_formula }}/bin/psql -h localhost -p {{ postgres_port }} -U app_owner -d {{ app_database }}"
           - "(You'll need to set PGPASSWORD or enter the password when prompted)"
           - "=========================================="
   

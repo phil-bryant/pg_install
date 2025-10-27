@@ -1,0 +1,12 @@
+---
+globs: tests/*.m
+alwaysApply: false
+---
+# Rule for all tests: mandatory-tests-must-separate-requirements-into-distinct-files
+
+see: mandatory-test-file-naming-pattern.mdc
+
+see: requirements-requirements.md
+
+Each test file in tests may text exactly one requirement.
+In other words each requirement will have at least one test file

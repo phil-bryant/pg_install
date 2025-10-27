@@ -1,0 +1,68 @@
+---
+globs: tests/*.m
+alwaysApply: false
+---
+# File Naming Pattern Rule: mandatory-xctest-file-naming-pattern
+
+## Pattern Format
+```
+{requirement_id}_test_{filebeingtested}-{testscenario}[_{optionalsuffix1}..._{optionalsuffixn}].m
+```
+
+## Components Breakdown
+
+### `requirement_id` (MANDATORY)
+the requirent_id being tested aligned with requirements-requirements.md
+
+### `filebeingtested` (MANDATORY) 
+The literal verbatim filename that this test is testing, expressed with neither its path nor its file extension, e.g., aviz. Always respect the case of the filebeingtested, e.g., aviz.m -> R001_test_aviz-....m
+
+### `testscenario` (MANDATORY)
+The actual test action that will be executed in this test, expressed as a snake_case imperative sentence, i.e., *verb [optional adjective1 ... optional adjectiven] noun [optional (rare) adverb]*. For example, **'create_personal_repo'**. A counter-example would be **'macos_environment'**, because that is not an imperative sentence -- it is missing the verb.
+
+### `optionalsuffix` (OPTIONAL)
+Literal verbatim flag or variable that differentiates this test from a test having the same `testscenario`. For example, you might have *'gh'* and *'glab'* suffixes if you had a requirement to support both the gh and the glab command-line tools. For example, 001_test_create_repo-create_personal_repo_gh.m and 002_test_create_repo-create_personal_repo_glab.m. You'll notice that in this example you have to choose between some naming options. Naming is art, not algorithm.
+
+## Naming Examples and Analysis
+
+### Option A (RECOMMENDED):
+```
+001_test_create_repo-create_personal_repo_gh.m
+002_test_create_repo-create_personal_repo_glab.m
+005_test_create_repo-create_work_repo_gh.m
+006_test_create_repo-create_work_repo_glab.m
+```
+
+### Option B (Valid but not as good):
+```
+001_test_create_repo-create_personal_gh_repo.m        
+002_test_create_repo-create_personal_glab_repo.m
+005_test_create_repo-create_work_gh_repo.m
+006_test_create_repo-create_work_glab_repo.m
+```
+
+### Option C (Valid but not as good):
+```
+001_test_create_repo-create_repo_personal_gh.m        
+002_test_create_repo-create_repo_personal_glab.m
+005_test_create_repo-create_repo_work_gh.m
+006_test_create_repo-create_repo_work_glab.m
+```
+
+## Why Option A is Better Than Option B
+
+One needs to know the script requirements and how humans process words.
+
+- Option B testscenario: Create personal|work gh|glab repo. This is clear but is 4 words.
+- Option A testscenario: Create personal repo. This is still clear but is only 3 words. Shorter is always better as long as we are being clear.
+- Option B mixes the mandatory flags and the optional flags in the testscenario which is not as indicative.
+- Option A puts the mandatory flags in the testscenario and the optional flags in the suffix.
+- Option B has all the scripts ending in _repo.m, which is less obvious to the human mind scanning through the files.
+- Option A has a script that ends in _gh.m and another that ends in _glab.m. This makes the difference between the script names pop out more.
+
+## Why Option A is Better Than Option C
+
+Again, one needs to know the script requirements and how humans process words.
+
+- Option C testscenario: Create repo. This isn't clear enough; we already know the script is creating a repo, in fact that's the script's name.
+- Option C mixes the mandatory and optional flags in the suffix, which isn't as good as how option A separates them.

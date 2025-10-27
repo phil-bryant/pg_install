@@ -1,0 +1,67 @@
+---
+globs: tests/*.m
+alwaysApply: true
+---
+# Rule: No New Testing Frameworks
+
+## Critical Restriction
+**NEVER create a new testing framework or testing infrastructure.** The project already has XCTest integration via `xcrun xctest` and proper macOS test project structure.
+
+## What This Means
+
+### ❌ PROHIBITED: Creating New Testing Frameworks
+- Do NOT create custom test runners
+- Do NOT create new test execution scripts
+- Do NOT create test framework wrappers
+- Do NOT modify how `xcrun xctest` works
+- Do NOT create integration test runners that bypass XCTest
+
+### ✅ REQUIRED: Use Existing XCTest Infrastructure
+- Use `xcrun xctest` command as specified in Makefile
+- Follow existing test bundle compilation pattern
+- Use standard XCTest assertions and structure
+- Test individual requirements in separate .m files
+- Let the Makefile handle test execution
+
+### ❌ PROHIBITED: Integration Test Scripts
+```bash
+# ❌ NEVER DO THIS
+#!/bin/bash
+# Custom test runner
+./bin/aviz --csv test.csv  # Bypassing XCTest
+
+# ❌ NEVER DO THIS
+#!/bin/bash
+# Manual test execution
+./tests/run_tests.sh  # Custom test infrastructure
+```
+
+### ✅ REQUIRED: XCTest Only
+```bash
+# ✅ CORRECT APPROACH
+make test  # Uses existing Makefile -> xcrun xctest
+```
+
+## Why This Rule Exists
+
+### Existing Infrastructure
+- The Makefile already compiles test bundles correctly
+- `xcrun xctest` is the standard macOS way to run tests
+- The project has proper test project structure (R028)
+- Requirements mandate XCTest-based testing (R027)
+
+### Verification
+Before creating any test-related code, verify:
+- [ ] **Uses `xcrun xctest`** - No custom test execution
+- [ ] **Follows Makefile pattern** - Test bundle compilation as specified
+- [ ] **Standard XCTest structure** - Inherits from XCTestCase
+- [ ] **No custom runners** - No shell scripts for test execution
+- [ ] **Proper test bundle** - .xctest file as output
+
+## Exception
+The ONLY acceptable test execution is:
+```bash
+make test  # This uses xcrun xctest correctly
+```
+
+**REMEMBER: If you think you need a custom testing approach, you're wrong. Use the existing XCTest infrastructure.**
