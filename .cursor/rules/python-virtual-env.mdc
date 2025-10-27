@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+
+# Python virtual environment Script Execution Order
+
+1. `./01_install_prerequisites.sh` - Ensure required version of Python is installed
+2. `./02_create_venv.sh` - Create virtual environment with above version of Python
+2. `activate` - Activate the virtual environment (this is a function in the current shell)
+3. `./03_load_requirements.sh` - Install/update Python packages
+
+# Python virtual environment activation
+- ❌ NEVER run `source` directly. Instead execute verbatim `activate` (a function in the current shell)

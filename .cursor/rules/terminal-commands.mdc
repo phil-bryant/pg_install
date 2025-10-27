@@ -1,0 +1,62 @@
+---
+alwaysApply: true
+---
+
+# Terminal Commands
+
+**NEVER use bash subshells!**
+
+- ❌ NEVER use `bash -c 'command'`
+- ❌ NEVER invoke bash explicitly
+- ✅ Run commands directly in the current shell
+- ✅ The shell context and environment must be respected
+
+**NEVER suppress errors!**
+
+- ❌ NEVER use `2>/dev/null` to hide error output
+- ❌ NEVER use `>/dev/null` to hide standard output
+- ✅ Let errors be visible so they can be debugged
+- ✅ All command output should be transparent
+
+**NEVER add unnecessary echo statements!**
+
+- ❌ NEVER use `&& echo "message"` to confirm command completion
+- ❌ NEVER use `|| echo "error"` to report failures
+- ✅ Command output and exit codes are sufficient
+- ✅ Let commands speak for themselves without extra noise
+
+**ALWAYS verify kill commands!**
+
+- ✅ After running `kill`, `killall`, or `pkill`, ALWAYS check if it worked
+- ✅ Use `ps aux | grep <process>` to verify the process is gone
+- ✅ If processes remain, investigate why and handle appropriately
+- ❌ NEVER assume a kill command succeeded without verification
+# Terminal Commands
+
+**NEVER use bash subshells!**
+
+- ❌ NEVER use `bash -c 'command'`
+- ❌ NEVER invoke bash explicitly
+- ✅ Run commands directly in the current shell
+- ✅ The shell context and environment must be respected
+
+**NEVER suppress errors!**
+
+- ❌ NEVER use `2>/dev/null` to hide error output
+- ❌ NEVER use `>/dev/null` to hide standard output
+- ✅ Let errors be visible so they can be debugged
+- ✅ All command output should be transparent
+
+**NEVER add unnecessary echo statements!**
+
+- ❌ NEVER use `&& echo "message"` to confirm command completion
+- ❌ NEVER use `|| echo "error"` to report failures
+- ✅ Command output and exit codes are sufficient
+- ✅ Let commands speak for themselves without extra noise
+
+**ALWAYS verify kill commands!**
+
+- ✅ After running `kill`, `killall`, or `pkill`, ALWAYS check if it worked
+- ✅ Use `ps aux | grep <process>` to verify the process is gone
+- ✅ If processes remain, investigate why and handle appropriately
+- ❌ NEVER assume a kill command succeeded without verification

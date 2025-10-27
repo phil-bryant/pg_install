@@ -1,0 +1,10 @@
+---
+globs: *.py
+alwaysApply: false
+---
+
+# Python Usage
+
+- ❌ NEVER run `python` or `python3` directly
+- ✅ Scripts are executable, use `./script_name.py`
+- ✅ If a script lacks execute permissions, fix it immediately before running

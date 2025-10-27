@@ -1,0 +1,16 @@
+---
+alwaysApply: true
+---
+# Package Management
+
+**CRITICAL: NEVER run pip directly!**
+
+- ❌ NEVER use `pip install`
+- ❌ NEVER use `pip3 install`
+- ❌ NEVER use `python -m pip install`
+- ❌ NEVER use any pip command directly
+
+**ALWAYS use the provided script:**
+- ✅ ONLY use `./02_load_requirements.sh` to install/update packages
+- ✅ Update `requirements.txt` first, then run the script
+- ✅ This ensures consistency and proper virtual environment usage

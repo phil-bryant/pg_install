@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+
+# File Modifications
+
+- Files with `<AI_MODEL_INSTRUCTION>` headers are LOCKED
+- DO NOT modify files marked as locked
+- These include setup scripts (00, 01, 03)
