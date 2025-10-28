@@ -3,7 +3,7 @@ globs: *-requirements.md
 alwaysApply: false
 ---
 ## Purpose
-Define how product requirements are written, numbered, traced, and maintained. This governs `aviz-requirements.md` and any future requirement specs.
+Define how product requirements are written, numbered, traced, and maintained. This governs `*-requirements.md` and any future requirement specs.
 
 ## Principles
 - Keep requirements atomic, testable, and implementation-agnostic.
@@ -23,16 +23,20 @@ Each requirement entry uses this compact template:
 
 ```text
 ID: R0xx[-yyy[-zzz]]  Statement: Single, testable statement (2-10 words).
-Constraints: Optional bullets for bounds, perf, UX, platform, etc.
-Rationale: Include only if it clarifies non-obvious intent.
-Tests: If the Statement isn't enough - bullet list of verifications (acceptance checks).
-Refs: Other requirement IDs this one depends on or refines, using a one-word descriptor of the nature of the reference.
+Design: (Optional, recommended) What solution/approach was chosen.
+Constraints: (Optional) Bullets for bounds, perf, UX, platform, etc.
+Rationale: (Optional, recommended) Why this design/approach; performance, maintainability, standards.
+Alternatives: (Optional, recommended) What else was considered and why not chosen.
+Tests: If Statement isn't enough - bullet list of verifications (acceptance checks).
+Refs: (Optional) Other requirement IDs this depends on or refines, with one-word descriptor.
 ```
 
 Important:
 - Keep entries vertically tight. Avoid explanatory paragraphs.
 - Prefer one statement per requirement; split if multiple independent clauses exist.
 - ALL STATEMENTS MUST INCLUDE A VERB AND/OR ADVERB INDICATING BEHAVIOR
+- Design, Rationale, and Alternatives are optional but highly recommended for design-heavy requirements
+- Design/Rationale/Alternatives clarify intent and preserve decision context for future maintainers
 
 ## Traceability (Code ↔ Requirements ↔ Tests ↔ Logs)
 - Every implemented requirement must be tagged in code with its ID in a compact comment at the smallest meaningful scope:
@@ -59,14 +63,34 @@ Important:
 - Use US-ASCII where possible; avoid smart quotes.
 - Keep the number of lines short to preserve fast human comprehension without need for manual UI vertical scrolling for consumption.
 
-## Example
+## Examples
 
+### Minimal Example (Simple Feature)
 ```
 R060  Print periodic console stats
 Statement: Print elapsed, interval images/sec, overall images/sec, ETA every N seconds.
 Constraints: N default 5; must not block workers; thread-safe.
 Tests: With 100 images, verify 20+ stats prints at 5s interval.
-Refs: R020 - Configureable Stats Interval
+Refs: R020 - Configurable Stats Interval
+```
+
+### Full Example (Design-Heavy Feature)
+```
+R015  Automatically renumber items on reorder
+Statement: Items maintain sequential ordering (1..n, no gaps) within each parent.
+Design: Database trigger `renumber_items()` handles INSERT/UPDATE/DELETE operations.
+Rationale: 
+- Performance: No round trips (SELECT → calculate → UPDATE); DB optimizes bulk UPDATE
+- Integrity: Guaranteed at DB level; works for any client
+- Atomic: Single transaction ensures consistency
+Alternatives:
+- Application logic: Requires round trips, multiple updates, error-prone
+- No auto-renumber: Allows gaps, complicates UI display logic
+Tests: 
+- Insert at position 3 of 5 items → positions 3-5 become 4-6
+- Delete position 2 of 5 items → positions 3-5 become 2-4
+- Move item from position 2 to 5 → intermediate items shift appropriately
+Refs: R010 - Ordered Items
 ```
 
 ## Maintenance
@@ -74,81 +98,5 @@ Refs: R020 - Configureable Stats Interval
 - Prefer sub-IDs for tight coupling to an existing area (e.g., `R020-*` for pipeline/threading).
 
 ## Changelog (for this document)
+- 2025-10-28: Added Design, Rationale, Alternatives as optional but recommended fields for design-heavy requirements.
 - 2025-10-21: Initial version.
-
-
-## Purpose
-Define how product requirements are written, numbered, traced, and maintained. This governs `aviz-requirements.md` and any future requirement specs.
-
-## Principles
-- Keep requirements atomic, testable, and implementation-agnostic.
-- Prefer clear, concise wording over verbose prose.
-- Be DRY: cross-reference existing requirements instead of duplicating text.
-- Maintain stable IDs; never reuse deleted IDs.
-
-## Numbering
-- Primary IDs are 3-digit zero-padded: R001–R999.
-- Sub-requirements when needed only (after discovery/testing):
-  - Hierarchical numeric path using dashes, e.g., `R020-003` or deep `R020-099-005`.
-  - A sub-requirement must refine or constrain its parent without contradicting it.
-- Place requirements in ascending and logical order. Leave gaps to allow future insertions.
-
-## Structure
-Each requirement entry uses this compact template:
-
-```text
-ID: R0xx[-yyy[-zzz]]  Statement: Single, testable statement (2-10 words).
-Constraints: Optional bullets for bounds, perf, UX, platform, etc.
-Rationale: Include only if it clarifies non-obvious intent.
-Tests: If the Statement isn't enough - bullet list of verifications (acceptance checks).
-Refs: Other requirement IDs this one depends on or refines, using a one-word descriptor of the nature of the reference.
-```
-
-Important:
-- Keep entries vertically tight. Avoid explanatory paragraphs.
-- Prefer one statement per requirement; split if multiple independent clauses exist.
-- ALL STATEMENTS MUST INCLUDE A VERB AND/OR ADVERB INDICATING BEHAVIOR
-
-## Traceability (Code ↔ Requirements ↔ Tests ↔ Logs)
-- Every implemented requirement must be tagged in code with its ID in a compact comment at the smallest meaningful scope:
-  - Example (Objective-C): `// R020: pipeline threads` above a function or block.
-  - Prefer `Rxxx` tag form in comments; IDs in docs remain numeric.
-- Tests (unit/integration/perf/prod-checks) must reference IDs in names or descriptions (e.g., `test_R060_estimated_time_remaining`).
-- Logs that explicitly fulfill key behavior should include `Rxxx` when useful for audits (especially for `--debug`/`--profile`).
-
-## Change Control
-- Never renumber existing IDs. To supersede: add a new ID and mark the old one "Deprecated by <new-id>".
-- Minor clarifications allowed if they do not change acceptance criteria.
-- Maintain a small changelog section at file end when semantics change.
-
-## Acceptance and Testability
-- Each requirement must list explicit, observable tests (CLI behavior, file outputs, performance bounds, or measurable properties like memory leaks = 0 under Instruments).
-- Where performance is required, specify metric, dataset, and measurement method.
-
-## Cross-References
-- Use `Refs:` to cite other IDs rather than repeating constraints.
-- If two requirements appear to conflict, the higher-specificity (deeper sub-id) governs the specific scope it names.
-
-## Formatting Rules
-- IDs are the primary anchors. Titles are helpful but non-authoritative.
-- Use US-ASCII where possible; avoid smart quotes.
-- Keep the number of lines short to preserve fast human comprehension without need for manual UI vertical scrolling for consumption.
-
-## Example
-
-```
-R060  Print periodic console stats
-Statement: Print elapsed, interval images/sec, overall images/sec, ETA every N seconds.
-Constraints: N default 5; must not block workers; thread-safe.
-Tests: With 100 images, verify 20+ stats prints at 5s interval.
-Refs: R020 - Configureable Stats Interval
-```
-
-## Maintenance
-- Insert new requirements in the correct numeric region; do not sort-rewrite the whole file.
-- Prefer sub-IDs for tight coupling to an existing area (e.g., `R020-*` for pipeline/threading).
-
-## Changelog (for this document)
-- 2025-10-21: Initial version.
-
-
