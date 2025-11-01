@@ -1,4 +1,5 @@
 #!/bin/bash
+umask 007
 
 set -e
 

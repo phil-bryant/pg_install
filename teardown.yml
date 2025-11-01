@@ -92,9 +92,23 @@
       when: postgres_stopped.changed | default(false)
       ignore_errors: yes
       
-    - name: Force kill any remaining PostgreSQL processes
-      shell: pkill -9 postgres
+    - name: Check for remaining PostgreSQL processes
+      shell: pgrep -f "postgres" || true
+      register: postgres_pids
+      changed_when: false
       ignore_errors: yes
+      
+    - name: Force kill any remaining PostgreSQL processes
+      shell: pkill -9 -f "postgres"
+      when: postgres_pids.stdout != ""
+      ignore_errors: yes
+      
+    - name: Verify PostgreSQL processes are terminated
+      shell: pgrep -f "postgres" || true
+      register: postgres_pids_after
+      changed_when: false
+      ignore_errors: yes
+      failed_when: postgres_pids_after.stdout != ""
     
     # ==========================================
     # REMOVE DATA AND CONFIGURATION
@@ -119,7 +133,12 @@
       ignore_errors: yes
       
     - name: List backup directory size
-      shell: du -sh {{ postgres_backup_dir }} 2>/dev/null || echo "No backups found"
+      shell: |
+        if [ -d "{{ postgres_backup_dir }}" ]; then
+          du -sh {{ postgres_backup_dir }}
+        else
+          echo "No backups found"
+        fi
       register: backup_size
       changed_when: false
       ignore_errors: yes
@@ -157,12 +176,20 @@
       
     - name: Remove any remaining PostgreSQL files in Homebrew directories
       shell: |
-        rm -rf /opt/homebrew/var/postgresql@{{ postgres_version }}
-        rm -rf /opt/homebrew/etc/postgresql@{{ postgres_version }}
-        rm -rf /opt/homebrew/var/log/postgresql@{{ postgres_version }}
-        rm -rf /usr/local/var/postgres@{{ postgres_version }}
-        rm -rf /usr/local/etc/postgres@{{ postgres_version }}
-        rm -rf /usr/local/var/log/postgres@{{ postgres_version }}
+        timestamp=$(date +%Y-%m-%d-%H.%M.%S)
+        trash_dir="$HOME/.Trash/postgres_cleanup_$timestamp"
+        mkdir -p "$trash_dir"
+        for path in \
+          "/opt/homebrew/var/postgresql@{{ postgres_version }}" \
+          "/opt/homebrew/etc/postgresql@{{ postgres_version }}" \
+          "/opt/homebrew/var/log/postgresql@{{ postgres_version }}" \
+          "/usr/local/var/postgres@{{ postgres_version }}" \
+          "/usr/local/etc/postgres@{{ postgres_version }}" \
+          "/usr/local/var/log/postgres@{{ postgres_version }}"; do
+          if [ -e "$path" ]; then
+            mv "$path" "$trash_dir/" || true
+          fi
+        done
       ignore_errors: yes
       
     - name: Clean up Homebrew

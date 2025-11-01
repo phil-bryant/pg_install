@@ -45,13 +45,13 @@
       file:
         path: "{{ postgres_log_dir }}"
         state: directory
-        mode: '0770'
+        mode: '0750'
         
     - name: Create backup directory
       file:
         path: "{{ postgres_backup_dir }}"
         state: directory
-        mode: '0770'
+        mode: '0750'
     
     # ==========================================
     # SERVICE MANAGEMENT
@@ -68,11 +68,30 @@
         path: "{{ postgres_data_dir }}/PG_VERSION"
       register: postgres_data_exists
       
+    - name: Check if PostgreSQL data directory path exists
+      stat:
+        path: "{{ postgres_data_dir }}"
+      register: postgres_data_dir_exists
+      
     - name: Initialize PostgreSQL database (if needed)
-      shell: /opt/homebrew/opt/{{ postgres_formula }}/bin/initdb -D {{ postgres_data_dir }}
-      when: 
-        - postgres_install_result.changed | default(false)
-        - not postgres_data_exists.stat.exists
+      shell: |
+        umask 027
+        /opt/homebrew/opt/{{ postgres_formula }}/bin/initdb -D {{ postgres_data_dir }}
+      when: not postgres_data_exists.stat.exists
+      register: initdb_result
+      
+    - name: Set permissions on PostgreSQL data directory
+      file:
+        path: "{{ postgres_data_dir }}"
+        state: directory
+        mode: '0750'
+      when: postgres_data_dir_exists.stat.exists
+        
+    - name: Set permissions on PostgreSQL data directory contents
+      shell: |
+        find {{ postgres_data_dir }} -type f -exec chmod 640 {} \;
+        find {{ postgres_data_dir }} -type d -exec chmod 750 {} \;
+      when: postgres_data_dir_exists.stat.exists
       
     - name: Start PostgreSQL service
       shell: brew services start {{ postgres_service_name }}
@@ -140,12 +159,18 @@
         backup: yes
       notify: restart postgresql
       
+    - name: Set permissions on postgresql.conf
+      file:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        mode: '0640'
+      
     - name: Backup original pg_hba.conf
       copy:
         src: "{{ postgres_data_dir }}/pg_hba.conf"
         dest: "{{ postgres_data_dir }}/pg_hba.conf.original"
         remote_src: yes
         force: no
+        mode: '0640'
         
     - name: Configure pg_hba.conf with TRUST for initial setup
       copy:
@@ -163,6 +188,7 @@
           # IPv6 local connections:
           host    all             all             ::1/128                 trust
         backup: yes
+        mode: '0640'
       notify: restart postgresql
     
     # ==========================================
@@ -295,6 +321,7 @@
           # Reject all other connections
           host    all             all             0.0.0.0/0               reject
         backup: yes
+        mode: '0640'
       notify: restart postgresql
     
     - name: Flush handlers to apply secure authentication
