@@ -17,7 +17,7 @@ postgres_listen_addresses: "localhost"
 postgres_max_connections: 100
 
 # Main database and admin user
-postgres_admin_1psa_item: "localhost_postgres"
+postgres_admin_1psa_item: "localhost_postgres_postgres"
 postgres_admin_user: "{{ lookup('pipe', '1psa -u ' ~ postgres_admin_1psa_item) | trim }}"
 postgres_admin_password: "{{ lookup('pipe', '1psa -p ' ~ postgres_admin_1psa_item) | trim }}"
 
