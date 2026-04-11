@@ -5,6 +5,8 @@ set -e
 
 # Configuration
 PYTHON_VERSION="3.12"
+ONE_PSA_REPO_URL="https://github.com/phil-bryant/1psa"
+ONE_PSA_DIR="../1psa"
 
 echo "============================================================"
 echo "Prerequisites Installer"
@@ -24,6 +26,22 @@ if ! command -v brew >/dev/null 2>&1; then
     exit 1
 else
     echo "✅ Homebrew is installed"
+fi
+
+# Install or update 1psa
+echo ""
+echo "Checking for 1psa source at ${ONE_PSA_DIR}..."
+if [ ! -d "${ONE_PSA_DIR}/.git" ]; then
+    if [ -d "${ONE_PSA_DIR}" ]; then
+        echo "❌ ${ONE_PSA_DIR} exists but is not a git repository."
+        exit 1
+    fi
+    echo "Cloning 1psa into ${ONE_PSA_DIR}..."
+    git clone "${ONE_PSA_REPO_URL}" "${ONE_PSA_DIR}"
+    echo "✅ 1psa cloned"
+else
+    echo "✅ 1psa repository already exists, pulling latest..."
+    git -C "${ONE_PSA_DIR}" pull --ff-only
 fi
 
 # Check for $PYTHON_VERSION

@@ -16,6 +16,14 @@
       fail:
         msg: "Homebrew is not installed. Please install it from https://brew.sh"
       when: homebrew_check.rc != 0
+
+    - name: Validate postgres admin credentials from 1psa
+      assert:
+        that:
+          - postgres_admin_user | trim | length > 0
+          - postgres_admin_password | trim | length > 0
+        fail_msg: "1psa did not return postgres admin username/password. Check postgres_admin_1psa_item and its fields."
+      changed_when: false
     
     # ==========================================
     # INSTALLATION PHASE
@@ -203,6 +211,20 @@
         port: "{{ postgres_port }}"
         delay: 2
         timeout: 30
+
+    - name: Create PostgreSQL admin user from 1psa
+      postgresql_user:
+        name: "{{ postgres_admin_user }}"
+        password: "{{ postgres_admin_password }}"
+        role_attr_flags: "SUPERUSER,CREATEDB,CREATEROLE,LOGIN"
+        state: present
+        login_user: "{{ ansible_user_id }}"
+        login_db: postgres
+      become_user: "{{ ansible_user_id }}"
+      environment:
+        PGHOST: localhost
+        PGPORT: "{{ postgres_port }}"
+      no_log: true
         
     - name: Create application database
       postgresql_db:

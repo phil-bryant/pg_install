@@ -51,18 +51,18 @@ if [ "$CURRENT_VENV_PATH" != "$EXPECTED_VENV_PATH" ]; then
     source "$VENV_DIR/bin/activate"
 fi
 
-# Display environment variables reminder
+# Display credential sourcing reminder
 echo "============================================================"
-echo "Optional: Set Password Environment Variables"
+echo "Credential Sources"
 echo "============================================================"
-echo "You can set custom passwords (recommended for production):"
+echo "Postgres admin credentials are read from 1psa item: postgres_admin"
 echo ""
-echo "  export POSTGRES_ADMIN_PASSWORD=\"your_secure_admin_password\""
+echo "Application user passwords can still be overridden with env vars:"
 echo "  export APP_OWNER_PASSWORD=\"your_secure_owner_password\""
 echo "  export APP_USER_PASSWORD=\"your_secure_user_password\""
 echo "  export APP_READONLY_PASSWORD=\"your_secure_readonly_password\""
 echo ""
-echo "If not set, default passwords will be used."
+echo "If app env vars are not set, defaults from vars/postgres.yml are used."
 echo "============================================================"
 echo ""
 
