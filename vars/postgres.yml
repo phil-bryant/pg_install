@@ -54,7 +54,7 @@ postgres_roles:
 
 # Security settings
 postgres_ssl: "off"  # Set to 'on' for production
-postgres_password_encryption: "scram-sha-256"
+postgres_password_encryption: "scram-sha-256"  # pragma: allowlist secret
 
 # Backup settings
 postgres_backup_dir: "/opt/homebrew/var/backups/postgres"

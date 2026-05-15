@@ -15,17 +15,29 @@ Complete automation solution for installing, configuring, securing, and managing
 ## Quick Start
 
 ```bash
-# Step 1-4: Initial setup (one time)
+# Step 0: Verify requirement/source/test traceability
+./00_verify_requirements_traceability.sh
+
+# Step 1-3: Initial setup (one time)
 ./01_install_prerequisites.sh
 ./02_create_venv.sh
 activate
 ./03_load_requirements.sh
 
-# Step 5: Stand up PostgreSQL
-./04_standup_postgres.sh
+# Step 4: Run AV checks
+./04_run_av_checks.sh
 
-# Step 6: When done, tear down PostgreSQL
-./05_teardown_postgres.sh
+# Step 5: Run security checks
+./05_run_security_checks.sh
+
+# Step 6: Run unit tests
+./06_run_unit_tests.sh
+
+# Step 7: Stand up PostgreSQL
+./07_standup_postgres.sh
+
+# Step 8: When done, tear down PostgreSQL
+./08_teardown_postgres.sh
 ```
 
 ## Setup
@@ -45,6 +57,9 @@ Before running the setup scripts, you must have:
 Run these scripts in order:
 
 ```bash
+# Step 0: Verify requirement/source/test traceability
+./00_verify_requirements_traceability.sh
+
 # Step 1: Check Homebrew is installed and install Python 3.12
 ./01_install_prerequisites.sh
 
@@ -54,7 +69,7 @@ Run these scripts in order:
 # Step 3: Activate the virtual environment
 activate
 
-# Step 4: Install Python dependencies (Ansible, psycopg2-binary)
+# Step 3: Install Python dependencies (Ansible, psycopg2-binary)
 ./03_load_requirements.sh
 ```
 
@@ -76,13 +91,29 @@ Edit `vars/postgres.yml` to customize:
 ### Set Password Environment Variables (Recommended)
 
 ```bash
-export POSTGRES_ADMIN_PASSWORD="your_secure_admin_password"
-export APP_OWNER_PASSWORD="your_secure_owner_password"
-export APP_USER_PASSWORD="your_secure_user_password"
-export APP_READONLY_PASSWORD="your_secure_readonly_password"
+export POSTGRES_ADMIN_PASSWORD="your_secure_admin_password" # pragma: allowlist secret
+export APP_OWNER_PASSWORD="your_secure_owner_password" # pragma: allowlist secret
+export APP_USER_PASSWORD="your_secure_user_password" # pragma: allowlist secret
+export APP_READONLY_PASSWORD="your_secure_readonly_password" # pragma: allowlist secret
 ```
 
 If not set, default passwords will be used (change them in production!).
+
+### Run Validation Checks
+
+```bash
+# Step 0: Requirement traceability verification
+./00_verify_requirements_traceability.sh
+
+# Step 4: AV checks (ClamAV lane)
+./04_run_av_checks.sh
+
+# Step 5: Security checks (SAST + ansible validations)
+./05_run_security_checks.sh
+
+# Step 6: Unit tests (bats/python/ansible)
+./06_run_unit_tests.sh
+```
 
 ### Run PostgreSQL Setup
 
@@ -90,7 +121,7 @@ If not set, default passwords will be used (change them in production!).
 
 ```bash
 # Run the setup script (it will auto-activate the venv)
-./04_standup_postgres.sh
+./07_standup_postgres.sh
 ```
 
 **Option 2: Using Ansible directly**
@@ -141,7 +172,7 @@ psql -h localhost -p 5432 -U app_readonly -d myapp_db
 
 ```bash
 # Run the teardown script (it will auto-activate the venv)
-./05_teardown_postgres.sh
+./08_teardown_postgres.sh
 ```
 
 **Option 2: Using Ansible directly**

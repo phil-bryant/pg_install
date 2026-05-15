@@ -105,7 +105,7 @@
       ignore_errors: yes
       
     - name: Check for remaining PostgreSQL processes
-      shell: ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '
+      shell: "ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '"
       register: postgres_pids
       failed_when: false
       changed_when: false
@@ -116,7 +116,7 @@
       ignore_errors: yes
       
     - name: Verify PostgreSQL processes are terminated
-      shell: ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '
+      shell: "ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '"
       register: postgres_pids_after
       changed_when: false
       ignore_errors: yes
