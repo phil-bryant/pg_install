@@ -1,15 +1,15 @@
 ---
-# PostgreSQL version - stable LTS version
-postgres_version: "15"
-postgres_formula: "postgresql@15"
+# PostgreSQL version - stable supported version
+postgres_version: "17"
+postgres_formula: "postgresql@17"
 
 # PostgreSQL directories and paths
-postgres_data_dir: "/opt/homebrew/var/postgresql@15"
-postgres_log_dir: "/opt/homebrew/var/log/postgresql@15"
-postgres_conf_dir: "/opt/homebrew/etc/postgresql@15"
+postgres_data_dir: "/opt/homebrew/var/postgresql@17"
+postgres_log_dir: "/opt/homebrew/var/log/postgresql@17"
+postgres_conf_dir: "/opt/homebrew/etc/postgresql@17"
 
 # Service configuration
-postgres_service_name: "postgresql@15"
+postgres_service_name: "postgresql@17"
 
 # Database configuration
 postgres_port: 5432

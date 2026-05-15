@@ -78,11 +78,23 @@
       register: postgres_running
       failed_when: false
       changed_when: false
+
+    - name: Discover all Homebrew PostgreSQL services
+      shell: brew services list | awk '/^postgresql(@[0-9]+)? / {print $1}'
+      register: postgres_services
+      changed_when: false
       
     - name: Stop PostgreSQL service
       shell: brew services stop {{ postgres_service_name }}
       when: postgres_running.rc == 0
       register: postgres_stopped
+
+    - name: Stop all discovered PostgreSQL services
+      shell: brew services stop {{ item }}
+      loop: "{{ postgres_services.stdout_lines | default([]) }}"
+      when: postgres_services.stdout_lines | length > 0
+      register: postgres_all_stopped
+      ignore_errors: yes
       
     - name: Wait for PostgreSQL to stop
       wait_for:
@@ -93,10 +105,10 @@
       ignore_errors: yes
       
     - name: Check for remaining PostgreSQL processes
-      shell: pgrep -f "postgres" || true
+      shell: ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '
       register: postgres_pids
+      failed_when: false
       changed_when: false
-      ignore_errors: yes
       
     - name: Force kill any remaining PostgreSQL processes
       shell: pkill -9 -f "postgres"
@@ -104,11 +116,11 @@
       ignore_errors: yes
       
     - name: Verify PostgreSQL processes are terminated
-      shell: pgrep -f "postgres" || true
+      shell: ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '
       register: postgres_pids_after
       changed_when: false
       ignore_errors: yes
-      failed_when: postgres_pids_after.stdout != ""
+      failed_when: postgres_pids_after.rc == 0 and postgres_pids_after.stdout != ""
     
     # ==========================================
     # REMOVE DATA AND CONFIGURATION
@@ -167,12 +179,26 @@
       register: postgres_installed
       failed_when: false
       changed_when: false
+
+    - name: Discover installed PostgreSQL formulas
+      shell: brew list --formula | rg '^postgresql(@[0-9]+)?$'
+      register: postgres_formulas
+      failed_when: false
+      changed_when: false
       
     - name: Uninstall PostgreSQL {{ postgres_version }}
       homebrew:
         name: "{{ postgres_formula }}"
         state: absent
       when: postgres_installed.rc == 0
+
+    - name: Uninstall all discovered PostgreSQL formulas
+      homebrew:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ postgres_formulas.stdout_lines | default([]) }}"
+      when: postgres_formulas.rc == 0 and postgres_formulas.stdout_lines | length > 0
+      ignore_errors: yes
       
     - name: Remove any remaining PostgreSQL files in Homebrew directories
       shell: |
@@ -180,12 +206,15 @@
         trash_dir="$HOME/.Trash/postgres_cleanup_$timestamp"
         mkdir -p "$trash_dir"
         for path in \
-          "/opt/homebrew/var/postgresql@{{ postgres_version }}" \
-          "/opt/homebrew/etc/postgresql@{{ postgres_version }}" \
-          "/opt/homebrew/var/log/postgresql@{{ postgres_version }}" \
-          "/usr/local/var/postgres@{{ postgres_version }}" \
-          "/usr/local/etc/postgres@{{ postgres_version }}" \
-          "/usr/local/var/log/postgres@{{ postgres_version }}"; do
+          /opt/homebrew/var/postgresql@* \
+          /opt/homebrew/etc/postgresql@* \
+          /opt/homebrew/var/log/postgresql@* \
+          /usr/local/var/postgresql@* \
+          /usr/local/etc/postgresql@* \
+          /usr/local/var/log/postgresql@* \
+          /usr/local/var/postgres@* \
+          /usr/local/etc/postgres@* \
+          /usr/local/var/log/postgres@*; do
           if [ -e "$path" ]; then
             mv "$path" "$trash_dir/" || true
           fi
@@ -193,7 +222,7 @@
       ignore_errors: yes
       
     - name: Clean up Homebrew
-      shell: brew cleanup {{ postgres_formula }}
+      shell: brew cleanup
       ignore_errors: yes
     
     # ==========================================

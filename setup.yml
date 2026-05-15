@@ -75,6 +75,19 @@
       stat:
         path: "{{ postgres_data_dir }}/PG_VERSION"
       register: postgres_data_exists
+
+    - name: Read PostgreSQL data directory major version
+      shell: "cut -d. -f1 {{ postgres_data_dir }}/PG_VERSION"
+      when: postgres_data_exists.stat.exists
+      register: postgres_data_major
+      changed_when: false
+
+    - name: Fail on PostgreSQL major version mismatch in existing data directory
+      fail:
+        msg: "Data directory {{ postgres_data_dir }} is major {{ postgres_data_major.stdout | trim }} but target is {{ postgres_version }}. Run a major upgrade path (pg_upgrade or dump/restore) before setup.yml."
+      when:
+        - postgres_data_exists.stat.exists
+        - (postgres_data_major.stdout | trim) != (postgres_version | string)
       
     - name: Check if PostgreSQL data directory path exists
       stat:

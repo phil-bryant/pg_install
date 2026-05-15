@@ -7,6 +7,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_DIRECTORY_NAME=$(basename "$SCRIPT_DIR")
 VENV_DIR="${SCRIPT_DIR}/${CURRENT_DIRECTORY_NAME}-venv"
+POSTGRES_FORMULA=$(awk -F': *' '/^postgres_formula:/{gsub(/"/,"",$2); print $2; exit}' "$SCRIPT_DIR/vars/postgres.yml")
+POSTGRES_PORT=$(awk -F': *' '/^postgres_port:/{gsub(/"/,"",$2); print $2; exit}' "$SCRIPT_DIR/vars/postgres.yml")
+APP_DATABASE=$(awk -F': *' '/^app_database:/{gsub(/"/,"",$2); print $2; exit}' "$SCRIPT_DIR/vars/postgres.yml")
+[ -n "$POSTGRES_FORMULA" ] || POSTGRES_FORMULA="postgresql@17"
+[ -n "$POSTGRES_PORT" ] || POSTGRES_PORT="5432"
+[ -n "$APP_DATABASE" ] || APP_DATABASE="myapp_db"
 
 echo "============================================================"
 echo "PostgreSQL Standup Script"
@@ -77,10 +83,10 @@ if ansible-playbook setup.yml; then
     echo "============================================================"
     echo ""
     echo "You can now connect to PostgreSQL with:"
-    echo "  PAGER='' PGPASSWORD=changeme_owner /opt/homebrew/opt/postgresql@15/bin/psql -h localhost -p 5432 -U app_owner -d myapp_db"
+    echo "  PAGER='' PGPASSWORD=changeme_owner /opt/homebrew/opt/${POSTGRES_FORMULA}/bin/psql -h localhost -p ${POSTGRES_PORT} -U app_owner -d ${APP_DATABASE}"
     echo ""
     echo "Or use the psql alias if PostgreSQL bin is in your PATH:"
-    echo "  PAGER='' PGPASSWORD=changeme_owner psql -h localhost -p 5432 -U app_owner -d myapp_db"
+    echo "  PAGER='' PGPASSWORD=changeme_owner psql -h localhost -p ${POSTGRES_PORT} -U app_owner -d ${APP_DATABASE}"
     echo ""
 else
     echo ""

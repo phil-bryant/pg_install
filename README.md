@@ -5,7 +5,7 @@ Complete automation solution for installing, configuring, securing, and managing
 ## Features
 
 ✅ **Automated Setup Scripts** - Helper scripts for prerequisites, venv creation, and dependency installation  
-✅ **Automated Installation** - Downloads and installs PostgreSQL 15 (stable LTS version)  
+✅ **Automated Installation** - Downloads and installs PostgreSQL 17 (current supported target)  
 ✅ **Idempotent** - Safe to run multiple times, only changes what's needed  
 ✅ **Secure by Default** - SCRAM-SHA-256 authentication, localhost-only, secure pg_hba.conf  
 ✅ **Complete Configuration** - Database, users, roles, tables, triggers, and sample data  
@@ -18,7 +18,7 @@ Complete automation solution for installing, configuring, securing, and managing
 # Step 1-4: Initial setup (one time)
 ./01_install_prerequisites.sh
 ./02_create_venv.sh
-source pg_install-venv/bin/activate
+activate
 ./03_load_requirements.sh
 
 # Step 5: Stand up PostgreSQL
@@ -52,7 +52,7 @@ Run these scripts in order:
 ./02_create_venv.sh
 
 # Step 3: Activate the virtual environment
-source pg_install-venv/bin/activate
+activate
 
 # Step 4: Install Python dependencies (Ansible, psycopg2-binary)
 ./03_load_requirements.sh
@@ -65,6 +65,13 @@ Edit `vars/postgres.yml` to customize:
 - Database names
 - User passwords (via environment variables)
 - Port and connection settings
+
+### Version Policy and Major Upgrades
+
+- Default runtime target is `postgresql@17`.
+- Keep `postgres_version`, `postgres_formula`, `postgres_service_name`, and `postgres_*_dir` values aligned in `vars/postgres.yml`.
+- If an existing data directory contains a different major version than `postgres_version`, `setup.yml` now fails fast.
+- Before changing majors (example: `15 -> 17`), run a migration path (`pg_upgrade` or dump/restore), then rerun setup.
 
 ### Set Password Environment Variables (Recommended)
 
@@ -90,7 +97,7 @@ If not set, default passwords will be used (change them in production!).
 
 ```bash
 # Ensure virtual environment is activated
-source pg_install-venv/bin/activate
+activate
 
 # Run the Ansible playbook
 ansible-playbook setup.yml
@@ -98,13 +105,22 @@ ansible-playbook setup.yml
 
 This will:
 - ✅ Check if PostgreSQL is already installed
-- ✅ Install PostgreSQL 15 via Homebrew (if needed)
+- ✅ Install PostgreSQL 17 via Homebrew (if needed)
 - ✅ Configure PostgreSQL with secure settings
 - ✅ Start the PostgreSQL service
 - ✅ Create database, users, and roles
 - ✅ Initialize schema (tables, indexes, triggers, functions)
 - ✅ Populate with sample data
 - ✅ Verify everything is working
+
+### Verify Runtime Version After Setup
+
+```bash
+brew services list | rg postgresql@
+PAGER='' /opt/homebrew/opt/postgresql@17/bin/psql -h localhost -p 5432 -U app_owner -d postgres -t -A -c "SELECT version();"
+```
+
+Expected: service is `started` for `postgresql@17` and `SELECT version()` reports PostgreSQL 17.x.
 
 ### Connect to Database
 
@@ -132,7 +148,7 @@ psql -h localhost -p 5432 -U app_readonly -d myapp_db
 
 ```bash
 # Ensure virtual environment is activated
-source pg_install-venv/bin/activate
+activate
 
 # Run the teardown playbook
 ansible-playbook teardown.yml
