@@ -1,68 +1,68 @@
-#!/bin/bash
+#!/usr/bin/env bash
 umask 007
+#R001: Run with strict mode from script directory for deterministic relative paths.
+set -euo pipefail
 
-set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# Configuration
 PYTHON_VERSION="3.12"
+PYTHON_COMMAND="python${PYTHON_VERSION}"
 ONE_PSA_REPO_URL="https://github.com/phil-bryant/1psa"
 ONE_PSA_DIR="../1psa"
 
-echo "============================================================"
-echo "Prerequisites Installer"
-echo "============================================================"
-echo ""
+require_homebrew() {
+  #R005: Fail fast when Homebrew is unavailable with explicit install guidance.
+  if command -v brew >/dev/null 2>&1; then return 0; fi
+  echo "Homebrew is not installed."
+  echo "Please install Homebrew first by running:"
+  echo "/bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+  echo "After installation, add Homebrew to your PATH and run this script again."
+  echo "For more information, visit: https://brew.sh/"
+  exit 1
+}
 
-# Check for Homebrew
-echo "Checking for Homebrew..."
-if ! command -v brew >/dev/null 2>&1; then
-    echo "❌ Homebrew is not installed."
-    echo ""
-    echo "Please install Homebrew first by running:"
-    echo "/bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-    echo ""
-    echo "After installation, add Homebrew to your PATH and run this script again."
-    echo "For more information, visit: https://brew.sh/"
-    exit 1
-else
-    echo "✅ Homebrew is installed"
-fi
-
-# Install or update 1psa
-echo ""
-echo "Checking for 1psa source at ${ONE_PSA_DIR}..."
-if [ ! -d "${ONE_PSA_DIR}/.git" ]; then
+ensure_1psa_repo() {
+  #R010: Ensure 1psa dependency is cloned when missing and updated when present.
+  if [ ! -d "${ONE_PSA_DIR}/.git" ]; then
     if [ -d "${ONE_PSA_DIR}" ]; then
-        echo "❌ ${ONE_PSA_DIR} exists but is not a git repository."
-        exit 1
+      echo "${ONE_PSA_DIR} exists but is not a git repository."
+      exit 1
     fi
-    echo "Cloning 1psa into ${ONE_PSA_DIR}..."
     git clone "${ONE_PSA_REPO_URL}" "${ONE_PSA_DIR}"
-    echo "✅ 1psa cloned"
-else
-    echo "✅ 1psa repository already exists, pulling latest..."
-    git -C "${ONE_PSA_DIR}" pull --ff-only
-fi
+    return 0
+  fi
+  git -C "${ONE_PSA_DIR}" pull --ff-only
+}
 
-# Check for $PYTHON_VERSION
-echo ""
-echo "Checking for Python ${PYTHON_VERSION}..."
-if ! command -v python${PYTHON_VERSION} >/dev/null 2>&1; then
-    echo "❌ Python ${PYTHON_VERSION} is not installed."
-    echo ""
-    echo "Installing Python ${PYTHON_VERSION} via Homebrew..."
-    brew install python@${PYTHON_VERSION}
-    
-    # Verify installation
-    if ! command -v python${PYTHON_VERSION} >/dev/null 2>&1; then
-        echo "❌ Failed to install Python ${PYTHON_VERSION}"
-        exit 1
-    else
-        echo "✅ Python ${PYTHON_VERSION} installed successfully"
-    fi
-else
-    echo "✅ Python ${PYTHON_VERSION} is already installed"
-fi
+ensure_python() {
+  #R015: Install python3.12 via brew when missing, then fail if still unavailable.
+  if command -v "${PYTHON_COMMAND}" >/dev/null 2>&1; then return 0; fi
+  brew install "python@${PYTHON_VERSION}"
+  if command -v "${PYTHON_COMMAND}" >/dev/null 2>&1; then return 0; fi
+  echo "Failed to install Python ${PYTHON_VERSION}"
+  exit 1
+}
 
-echo ""
-echo "✅ All prerequisites are satisfied!"
+ensure_command() {
+  local command_name="$1" formula_name="$2"
+  #R020: Install required security/AV tools and verify command availability.
+  if command -v "${command_name}" >/dev/null 2>&1; then return 0; fi
+  brew install "${formula_name}"
+  if command -v "${command_name}" >/dev/null 2>&1; then return 0; fi
+  echo "Failed to install required command: ${command_name}"
+  exit 1
+}
+
+require_homebrew
+ensure_1psa_repo
+ensure_python
+ensure_command "semgrep" "semgrep"
+ensure_command "shellcheck" "shellcheck"
+ensure_command "gitleaks" "gitleaks"
+ensure_command "detect-secrets" "detect-secrets"
+ensure_command "clamscan" "clamav"
+ensure_command "freshclam" "clamav"
+
+#R025: Emit deterministic completion summary once all prerequisite checks pass.
+echo "All prerequisites are satisfied."

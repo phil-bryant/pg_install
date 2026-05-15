@@ -8,16 +8,14 @@ cd "$SCRIPT_DIR"
 #R001: Security checks execute from repository root with strict mode.
 #R005: Required security tooling must exist or the script exits with install guidance.
 #R010: SAST lane runs semgrep, shellcheck, gitleaks, detect-secrets, and ansible checks.
-#R015: DAST behavior remains deterministic and opt-in via RUN_DAST.
-#R020: Security findings are aggregated into machine-readable summary and gate output.
+#R015: DAST lane is intentionally out-of-scope for this repository security script.
+#R020: Security findings are aggregated into machine-readable summary and gate on any finding.
 #R025: detect-secrets exclusions are applied during counting and gate evaluation.
 #R030: Script emits deterministic final completion output with report location.
 
 REPORT_DIR="${SECURITY_REPORT_DIR:-./.security-reports}"
 RUN_SAST="${RUN_SAST:-true}"
-RUN_DAST="${RUN_DAST:-false}"
 RUN_ANSIBLE_CHECKS="${RUN_ANSIBLE_CHECKS:-true}"
-FAIL_ON_HIGH_CRITICAL="${SECURITY_FAIL_ON_HIGH_CRITICAL:-true}"
 DETECT_SECRETS_EXCLUDE_FILES_REGEX="${DETECT_SECRETS_EXCLUDE_FILES_REGEX:-(^|/)requirements/.*-requirements\\.md$|(^|/)\\.git/|(^|/)pg_install-venv/|(^|/)\\.venv/|(^|/)venv/|(^|/)\\.security-reports/}"
 
 #R010: Emit deterministic multiline startup header for security lane configuration.
@@ -25,9 +23,8 @@ echo "============================================================"
 echo "Security Checks Script"
 echo "============================================================"
 echo "Run SAST: ${RUN_SAST}"
-echo "Run DAST: ${RUN_DAST}"
 echo "Run Ansible Checks: ${RUN_ANSIBLE_CHECKS}"
-echo "Fail on High/Critical: ${FAIL_ON_HIGH_CRITICAL}"
+echo "Fail on Any Findings: true"
 echo "Reports Directory: ${REPORT_DIR}"
 echo "============================================================"
 echo ""
@@ -114,21 +111,20 @@ run_sast_lane() {
     ANSIBLE_TEARDOWN_EXIT=0
   fi
 
-  #R020: Aggregate SAST and ansible-check findings into gate summary.
-  python3 - <<'PY' "${REPORT_DIR}" "${FAIL_ON_HIGH_CRITICAL}" "${SHELLCHECK_EXIT}" "${GITLEAKS_EXIT}" "${ANSIBLE_LINT_EXIT}" "${ANSIBLE_SETUP_EXIT}" "${ANSIBLE_TEARDOWN_EXIT}" "${DETECT_SECRETS_EXCLUDE_FILES_REGEX}"
+  #R020: Aggregate SAST/ansible findings and fail gate when any finding exists.
+  python3 - <<'PY' "${REPORT_DIR}" "${SHELLCHECK_EXIT}" "${GITLEAKS_EXIT}" "${ANSIBLE_LINT_EXIT}" "${ANSIBLE_SETUP_EXIT}" "${ANSIBLE_TEARDOWN_EXIT}" "${DETECT_SECRETS_EXCLUDE_FILES_REGEX}"
 import json
 import re
 import sys
 from pathlib import Path
 
 report_dir = Path(sys.argv[1])
-fail_on_high = sys.argv[2].lower() == "true"
-shellcheck_exit = int(sys.argv[3])
-gitleaks_exit = int(sys.argv[4])
-ansible_lint_exit = int(sys.argv[5])
-ansible_setup_exit = int(sys.argv[6])
-ansible_teardown_exit = int(sys.argv[7])
-exclude_pattern = sys.argv[8]
+shellcheck_exit = int(sys.argv[2])
+gitleaks_exit = int(sys.argv[3])
+ansible_lint_exit = int(sys.argv[4])
+ansible_setup_exit = int(sys.argv[5])
+ansible_teardown_exit = int(sys.argv[6])
+exclude_pattern = sys.argv[7]
 
 def load_json(path, fallback):
     text = Path(path).read_text(encoding="utf-8", errors="replace").strip()
@@ -142,6 +138,7 @@ def load_json(path, fallback):
 semgrep = load_json(report_dir / "semgrep.json", {"results": []})
 semgrep_results = semgrep.get("results", []) if isinstance(semgrep, dict) else []
 semgrep_high = sum(1 for item in semgrep_results if str(item.get("extra", {}).get("severity", "")).upper() in {"CRITICAL", "ERROR", "HIGH"})
+semgrep_findings_total = len(semgrep_results)
 
 shellcheck = load_json(report_dir / "shellcheck.json", [])
 if isinstance(shellcheck, list):
@@ -177,8 +174,10 @@ if isinstance(ansible_lint, list):
 else:
     ansible_lint_findings = 0
 syntax_failures = int(ansible_setup_exit != 0) + int(ansible_teardown_exit != 0)
-high_critical_total = semgrep_high + shellcheck_high + gitleaks_findings + detect_findings + ansible_lint_findings + syntax_failures
+findings_total = semgrep_findings_total + shellcheck_issue_count + gitleaks_findings + detect_findings + ansible_lint_findings + syntax_failures
 summary = {
+    "findings_total": findings_total,
+    "semgrep_findings_total": semgrep_findings_total,
     "semgrep_high_critical": semgrep_high,
     "shellcheck_high_critical": shellcheck_high,
     "shellcheck_findings_total": shellcheck_issue_count,
@@ -193,8 +192,8 @@ summary = {
     "ansible_lint_exit_code": ansible_lint_exit,
     "ansible_setup_syntax_exit_code": ansible_setup_exit,
     "ansible_teardown_syntax_exit_code": ansible_teardown_exit,
-    "high_critical_total": high_critical_total,
-    "gate_failed": fail_on_high and high_critical_total > 0,
+    "high_critical_total": semgrep_high + shellcheck_high + gitleaks_findings + detect_findings + ansible_lint_findings + syntax_failures,
+    "gate_failed": findings_total > 0,
 }
 (report_dir / "sast-summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 print("Static Application Security Testing (SAST) summary")
@@ -206,19 +205,7 @@ PY
   echo "Static Application Security Testing (SAST) checks completed."
 }
 
-run_dast_lane() {
-  #R015: Keep DAST explicitly opt-in for this infrastructure repo.
-  if [[ "$RUN_DAST" != "true" ]]; then
-    echo "DAST lane skipped."
-    return 0
-  fi
-  print_tool_header "DAST placeholder" "Dynamic application security testing remains explicit opt-in for this repo." "When enabled, script exits with clear guidance to implement repo-specific targets." "https://owasp.org/www-project-web-security-testing-guide/"
-  echo "DAST is not configured for this repo yet."
-  echo "Set RUN_DAST=false (default) or implement repo-specific DAST targets."
-  exit 1
-}
-
 run_sast_lane
-run_dast_lane
+#R015: DAST is intentionally not executed; step-05 remains SAST-only by design.
 #R030: Emit deterministic final completion output including report location.
 echo "Security checks completed. Reports: ${REPORT_DIR}"

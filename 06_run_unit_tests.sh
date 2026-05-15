@@ -103,6 +103,7 @@ else
   record_skip "Python unittest"
 fi
 
+# shellcheck disable=SC2329
 run_ansible_syntax_suite() {
   local code=0
   if [[ -f "./setup.yml" ]]; then

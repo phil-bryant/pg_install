@@ -22,7 +22,7 @@ if [ -z "$PYTHON_VERSION" ]; then
 fi
 
 # Check if the required Python version is installed
-if ! command -v python${PYTHON_VERSION} >/dev/null 2>&1; then
+if ! command -v "python${PYTHON_VERSION}" >/dev/null 2>&1; then
     echo "❌ ERROR: Python ${PYTHON_VERSION} is not installed."
     echo ""
     echo "Please run the prerequisites script first:"
@@ -54,7 +54,7 @@ if [ -d "$VENV_DIR" ]; then
 fi
 
 echo "Creating virtual environment..."
-python${PYTHON_VERSION} -m venv "$VENV_DIR"
+"python${PYTHON_VERSION}" -m venv "$VENV_DIR"
 
 echo "✓ Created virtual environment: $VENV_DIR"
 echo ""

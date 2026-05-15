@@ -34,6 +34,7 @@ fi
 # Check if virtual environment is active
 if [ -z "$VIRTUAL_ENV" ]; then
     echo "Virtual environment not active. Activating..."
+    # shellcheck disable=SC1091
     source "$VENV_DIR/bin/activate"
     if [ -z "$VIRTUAL_ENV" ]; then
         echo "❌ ERROR: Failed to activate virtual environment"
@@ -54,6 +55,7 @@ if [ "$CURRENT_VENV_PATH" != "$EXPECTED_VENV_PATH" ]; then
     echo ""
     echo "Activating the correct virtual environment..."
     deactivate 2>/dev/null || true
+    # shellcheck disable=SC1091
     source "$VENV_DIR/bin/activate"
 fi
 

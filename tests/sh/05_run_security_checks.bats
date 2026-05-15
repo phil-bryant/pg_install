@@ -103,14 +103,14 @@ EOF
   make_ansible_playbook_stub 0 0
   mkdir -p "${TEST_TMPDIR}/elsewhere"
   cd "${TEST_TMPDIR}/elsewhere"
-  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=false bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
   [ "$status" -eq 0 ]
   [ -f "${FIXTURE_ROOT}/.security-reports/sast-summary.json" ]
 }
 
 @test "fails fast with installer guidance when semgrep is missing" {
   #R005
-  run env PATH="/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=false bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  run env PATH="/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
   [ "$status" -ne 0 ]
   [[ "$output" == *"Missing required command: semgrep"* ]]
   [[ "$output" == *"./01_install_prerequisites.sh"* ]]
@@ -124,7 +124,7 @@ EOF
   make_detect_secrets_stub
   make_ansible_playbook_stub 0 0
   make_ansible_lint_stub '[]' 0
-  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=false bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
   [ "$status" -eq 0 ]
   [ -f "${FIXTURE_ROOT}/.security-reports/semgrep.json" ]
   [ -f "${FIXTURE_ROOT}/.security-reports/shellcheck.json" ]
@@ -142,7 +142,7 @@ EOF
   make_gitleaks_stub '[{"RuleID":"secret"}]'
   make_detect_secrets_stub
   make_ansible_playbook_stub 0 0
-  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=false SECURITY_FAIL_ON_HIGH_CRITICAL=true bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"SAST) gate failed"* ]]
 }
@@ -154,37 +154,38 @@ EOF
   make_gitleaks_stub
   make_detect_secrets_stub '{"results":{"requirements/05_run_security_checks-requirements.md":[{"type":"Secret Keyword","line_number":1}],"pg_install-venv/lib/python3.12/site-packages/pkg/file.py":[{"type":"Secret Keyword","line_number":2}],".security-reports/old-report.json":[{"type":"Secret Keyword","line_number":3}]}}'
   make_ansible_playbook_stub 0 0
-  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=false SECURITY_FAIL_ON_HIGH_CRITICAL=true bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
   [ "$status" -eq 0 ]
   run python3 -c 'import json,sys;print(json.load(open(sys.argv[1], encoding="utf-8"))["detect_secrets_findings"])' "${FIXTURE_ROOT}/.security-reports/sast-summary.json"
   [ "$status" -eq 0 ]
   [ "$output" -eq 0 ]
 }
 
-@test "keeps shellcheck exit code 1 non-gating for info-level findings" {
+@test "fails gate when only shellcheck info-level findings exist" {
   #R020
   make_semgrep_stub
   make_shellcheck_stub '[{"level":"info","code":2086}]' 1
   make_gitleaks_stub
   make_detect_secrets_stub
   make_ansible_playbook_stub 0 0
-  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=false SECURITY_FAIL_ON_HIGH_CRITICAL=true bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  [ "$status" -eq 1 ]
+  run python3 -c 'import json,sys;s=json.load(open(sys.argv[1], encoding="utf-8"));print(s["findings_total"],s["shellcheck_exit_code"],s["shellcheck_findings_total"],int(s["gate_failed"]))' "${FIXTURE_ROOT}/.security-reports/sast-summary.json"
   [ "$status" -eq 0 ]
-  run python3 -c 'import json,sys;s=json.load(open(sys.argv[1], encoding="utf-8"));print(s["shellcheck_exit_code"],s["shellcheck_high_critical"],s["shellcheck_findings_total"],s["shellcheck_non_gating_findings"],int(s["shellcheck_tool_error"]))' "${FIXTURE_ROOT}/.security-reports/sast-summary.json"
-  [ "$status" -eq 0 ]
-  [ "$output" = "1 0 1 1 0" ]
+  [ "$output" = "1 1 1 1" ]
 }
 
-@test "fails when DAST is explicitly enabled for this repo" {
+@test "does not emit DAST lane status output" {
   #R015
   make_semgrep_stub
   make_shellcheck_stub
   make_gitleaks_stub
   make_detect_secrets_stub
   make_ansible_playbook_stub 0 0
-  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=true bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"DAST is not configured for this repo yet."* ]]
+  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"DAST lane"* ]]
+  [[ "$output" != *"Run DAST:"* ]]
 }
 
 @test "prints deterministic final completion output with report path" {
@@ -194,7 +195,7 @@ EOF
   make_gitleaks_stub
   make_detect_secrets_stub
   make_ansible_playbook_stub 0 0
-  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" RUN_DAST=false bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
+  run env PATH="${STUB_BIN}:/usr/bin:/bin:/usr/sbin:/sbin" bash "${FIXTURE_ROOT}/05_run_security_checks.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Security checks completed. Reports:"* ]]
 }

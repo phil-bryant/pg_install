@@ -19,17 +19,17 @@ Design: Run `semgrep`, `shellcheck`, `gitleaks`, `detect-secrets`, ansible synta
 Tests:
 - Verify expected report files are written for semgrep, shellcheck, gitleaks, detect-secrets, ansible-lint, and ansible syntax logs.
 
-R015  Statement: Support deterministic DAST behavior without manifold-specific assumptions.
-Design: Keep `RUN_DAST=false` default; when `RUN_DAST=true`, fail clearly that DAST is not configured for this infra repo.
+R015  Statement: Keep step-05 security checks SAST-only for this repository.
+Design: Do not run a DAST lane or emit DAST lane status output in this script.
 Tests:
-- Run with default config and verify deterministic `DAST lane skipped.` output.
-- Run with `RUN_DAST=true` and verify explicit non-zero configuration error.
+- Run successful checks and verify output does not include DAST lane status text.
 
-R020  Statement: Produce machine-readable SAST summary and gate evaluation.
-Design: Write `sast-summary.json` with per-tool counts, ansible syntax/lint signals, `high_critical_total`, and `gate_failed` controlled by `SECURITY_FAIL_ON_HIGH_CRITICAL`.
+R020  Statement: Fail SAST gate when any finding is detected.
+Design: Write `sast-summary.json` with per-tool finding counts, aggregate `findings_total`, and set `gate_failed=true` whenever `findings_total > 0`.
 Tests:
 - Seed finding-bearing stubs and verify gate fails with explicit SAST gate-failed output.
 - Seed clean stubs and verify `gate_failed=false`.
+- Seed info-level-only findings and verify gate still fails.
 
 R025  Statement: Exclude configured detect-secrets paths from gate totals.
 Design: Apply `DETECT_SECRETS_EXCLUDE_FILES_REGEX` while counting detect-secrets findings for summary and gating.
