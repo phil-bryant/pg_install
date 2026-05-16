@@ -14,27 +14,21 @@ Design: Discover `tests/sh/*.bats`; run via `bats` when available, fail if test 
 Tests:
 - Add temporary `.bats` files and verify Bats suite executes.
 
-R010 Statement: Autodiscover pytest-style Python tests.
-Design: Discover `tests/py/test_*.py`; run `python3 -m pytest` when pytest is installed, otherwise fail the suite.
+R010 Statement: Python test suites are out of scope for this repository step.
+Design: `06_run_unit_tests.sh` does not discover or run pytest/unittest suites; shell and ansible validation suites remain in scope.
 Tests:
-- Verify pytest discovery runs when files exist.
-- Verify missing pytest with discovered files causes failure.
-
-R015 Statement: Autodiscover unittest-style Python tests.
-Design: Discover `python/test_*.py`; run `python3 -m unittest discover -s python -p 'test_*.py'`.
-Tests:
-- Add unittest module under `python/` and verify execution.
+- Verify output does not include `Pytest` or `Python unittest` suite entries.
 
 R020 Statement: Run ansible syntax checks for repo playbooks.
 Design: When `setup.yml` or `teardown.yml` exists, run `ansible-playbook --syntax-check` for each present playbook.
 Tests:
 - Stub `ansible-playbook` and verify syntax checks execute.
 
-R025 Statement: Run ansible-lint when available for present playbooks.
-Design: If playbooks exist and `ansible-lint` is installed, run `ansible-lint setup.yml teardown.yml`; otherwise mark suite skipped.
+R025 Statement: Require ansible-lint when playbooks are present.
+Design: If `setup.yml` or `teardown.yml` exists, `ansible-lint` must be available and succeeds for present playbooks; missing command is a failing suite with setup guidance.
 Tests:
 - Stub `ansible-lint` and verify invocation path.
-- Verify suite skip when command is unavailable.
+- Verify missing `ansible-lint` with discovered playbooks causes failure and prints remediation guidance.
 
 R030 Statement: Continue through suite failures and report full outcomes.
 Design: Execute discovered suites independently and keep running subsequent suites even after a failure.

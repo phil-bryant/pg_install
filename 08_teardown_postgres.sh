@@ -13,6 +13,8 @@ echo "PostgreSQL Teardown Script"
 echo "============================================================"
 echo ""
 
+ANSIBLE_PLAYBOOK="${VENV_DIR}/bin/ansible-playbook"
+
 # Check if virtual environment exists
 if [ ! -d "$VENV_DIR" ]; then
     echo "❌ ERROR: Virtual environment not found!"
@@ -22,37 +24,20 @@ if [ ! -d "$VENV_DIR" ]; then
     echo "please first run:"
     echo "  ./01_install_prerequisites.sh"
     echo "  ./02_create_venv.sh"
-    echo "  source ${CURRENT_DIRECTORY_NAME}-venv/bin/activate"
+    echo "  activate"
     echo "  ./03_load_requirements.sh"
     exit 1
 fi
 
-# Check if virtual environment is active
-if [ -z "$VIRTUAL_ENV" ]; then
-    echo "Virtual environment not active. Activating..."
-    # shellcheck disable=SC1091
-    source "$VENV_DIR/bin/activate"
-    if [ -z "$VIRTUAL_ENV" ]; then
-        echo "❌ ERROR: Failed to activate virtual environment"
-        exit 1
-    fi
-    echo "✅ Virtual environment activated"
+if [ ! -x "$ANSIBLE_PLAYBOOK" ]; then
+    echo "❌ ERROR: ${ANSIBLE_PLAYBOOK} not found or not executable."
     echo ""
-fi
-
-# Verify we're in the correct virtual environment
-EXPECTED_VENV_PATH=$(cd "$VENV_DIR" && pwd -P)
-CURRENT_VENV_PATH=$(cd "$VIRTUAL_ENV" && pwd -P 2>/dev/null || echo "$VIRTUAL_ENV")
-
-if [ "$CURRENT_VENV_PATH" != "$EXPECTED_VENV_PATH" ]; then
-    echo "⚠️  WARNING: You are using a different virtual environment!"
-    echo "Expected: $EXPECTED_VENV_PATH"
-    echo "Current:  $CURRENT_VENV_PATH"
-    echo ""
-    echo "Activating the correct virtual environment..."
-    deactivate 2>/dev/null || true
-    # shellcheck disable=SC1091
-    source "$VENV_DIR/bin/activate"
+    echo "Run the dependency setup for this virtual environment:"
+    echo "  ./01_install_prerequisites.sh"
+    echo "  ./02_create_venv.sh"
+    echo "  activate"
+    echo "  ./03_load_requirements.sh"
+    exit 1
 fi
 
 # Display warning
@@ -87,7 +72,7 @@ echo "Running PostgreSQL teardown playbook..."
 echo ""
 
 # Run the Ansible playbook with confirmation
-if ansible-playbook teardown.yml -e confirm_teardown=yes; then
+if "$ANSIBLE_PLAYBOOK" teardown.yml -e confirm_teardown=yes; then
     echo ""
     echo "============================================================"
     echo "✅ PostgreSQL Teardown Complete!"

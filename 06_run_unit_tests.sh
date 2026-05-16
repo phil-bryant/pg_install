@@ -67,58 +67,26 @@ else
   record_skip "Bats"
 fi
 
-#R010: Discover pytest-style tests and require pytest availability.
-PYTEST_TEST_FILES=()
-while IFS= read -r test_file; do
-  PYTEST_TEST_FILES+=("$test_file")
-done < <(find ./tests/py -type f -name "test_*.py" 2>/dev/null | sort)
-if [[ "${#PYTEST_TEST_FILES[@]}" -gt 0 ]]; then
-  if python3 - <<'PY' >/dev/null 2>&1
-import importlib.util
-raise SystemExit(0 if importlib.util.find_spec("pytest") else 1)
-PY
-  then
-    run_suite "Pytest (${#PYTEST_TEST_FILES[@]} files)" python3 -m pytest "${PYTEST_TEST_FILES[@]}"
-  else
-    echo "❌ [unit-tests] Pytest tests discovered but pytest is unavailable."
-    record_fail "Pytest (${#PYTEST_TEST_FILES[@]} files)"
-  fi
-else
-  record_skip "Pytest"
-fi
-
-#R015: Discover and run unittest-style tests from python/test_*.py.
-UNITTEST_TEST_FILES=()
-while IFS= read -r test_file; do
-  UNITTEST_TEST_FILES+=("$test_file")
-done < <(find ./python -maxdepth 1 -type f -name "test_*.py" 2>/dev/null | sort)
-if [[ "${#UNITTEST_TEST_FILES[@]}" -gt 0 ]]; then
-  if command -v python3 >/dev/null 2>&1; then
-    run_suite "Python unittest (${#UNITTEST_TEST_FILES[@]} files)" python3 -m unittest discover -s python -p "test_*.py"
-  else
-    echo "❌ [unit-tests] unittest files discovered but python3 is unavailable."
-    record_fail "Python unittest (${#UNITTEST_TEST_FILES[@]} files)"
-  fi
-else
-  record_skip "Python unittest"
-fi
-
-# shellcheck disable=SC2329
+#R010: Python suites are intentionally not discovered in this repository step.
 run_ansible_syntax_suite() {
+  local -a playbooks=("$@")
   local code=0
-  if [[ -f "./setup.yml" ]]; then
-    ansible-playbook --syntax-check setup.yml || code=1
-  fi
-  if [[ -f "./teardown.yml" ]]; then
-    ansible-playbook --syntax-check teardown.yml || code=1
-  fi
+  for playbook in "${playbooks[@]}"; do ansible-playbook --syntax-check "$playbook" || code=1; done
   return "$code"
 }
 
 #R020: Run ansible syntax checks when playbooks are present.
-if [[ -f "./setup.yml" || -f "./teardown.yml" ]]; then
+ANSIBLE_PLAYBOOKS=()
+[[ -f "./setup.yml" ]] && ANSIBLE_PLAYBOOKS+=("setup.yml")
+[[ -f "./teardown.yml" ]] && ANSIBLE_PLAYBOOKS+=("teardown.yml")
+if [[ "${#ANSIBLE_PLAYBOOKS[@]}" -gt 0 ]]; then
   if command -v ansible-playbook >/dev/null 2>&1; then
-    run_suite "Ansible syntax checks" run_ansible_syntax_suite
+    print_suite_header "Ansible syntax checks"
+    set +e
+    run_ansible_syntax_suite "${ANSIBLE_PLAYBOOKS[@]}"
+    code=$?
+    set -e
+    if [[ "$code" -eq 0 ]]; then record_pass "Ansible syntax checks"; else record_fail "Ansible syntax checks"; fi
   else
     echo "❌ [unit-tests] Ansible playbooks discovered but 'ansible-playbook' is not available."
     record_fail "Ansible syntax checks"
@@ -128,11 +96,13 @@ else
 fi
 
 #R025: Run ansible-lint when available and playbooks are present.
-if [[ -f "./setup.yml" || -f "./teardown.yml" ]]; then
+if [[ "${#ANSIBLE_PLAYBOOKS[@]}" -gt 0 ]]; then
   if command -v ansible-lint >/dev/null 2>&1; then
-    run_suite "Ansible lint" ansible-lint setup.yml teardown.yml
+    run_suite "Ansible lint" ansible-lint "${ANSIBLE_PLAYBOOKS[@]}"
   else
-    record_skip "Ansible lint"
+    echo "❌ [unit-tests] Ansible playbooks discovered but 'ansible-lint' is not available."
+    echo "[unit-tests] Fix: run ./01_install_prerequisites.sh, then ./02_create_venv.sh, then activate, then ./03_load_requirements.sh."
+    record_fail "Ansible lint"
   fi
 else
   record_skip "Ansible lint"

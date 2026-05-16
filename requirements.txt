@@ -1,5 +1,6 @@
 # Ansible for PostgreSQL automation
 ansible>=8.0.0
+ansible-lint>=24.0.0
 
 # PostgreSQL Python adapter for Ansible modules
 psycopg2-binary>=2.9.0

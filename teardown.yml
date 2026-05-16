@@ -1,209 +1,222 @@
----
 - name: Teardown PostgreSQL on macOS
   hosts: localhost
-  gather_facts: yes
+  gather_facts: true
   vars_files:
     - vars/postgres.yml
-  
   vars_prompt:
     - name: confirm_teardown
-      prompt: "This will COMPLETELY REMOVE PostgreSQL and ALL DATA. Type 'yes' to confirm"
-      private: no
-      
+      prompt: This will COMPLETELY REMOVE PostgreSQL and ALL DATA. Type 'yes' to confirm
+      private: false
   tasks:
-    - name: Verify confirmation
-      fail:
-        msg: "Teardown cancelled. You must type 'yes' to confirm."
-      when: confirm_teardown != 'yes'
-      
-    - name: Display warning
-      debug:
+    - name: Verify teardown confirmation token
+      ansible.builtin.fail:
+        msg: Teardown cancelled. You must type 'yes' to confirm.
+      when: confirm_teardown != "yes"
+    - name: Display teardown warning
+      ansible.builtin.debug:
         msg:
-          - "=========================================="
-          - "WARNING: Beginning PostgreSQL Teardown"
-          - "=========================================="
-          - "This will remove:"
+          - ==========================================
+          - WARNING: Beginning PostgreSQL Teardown
+          - ==========================================
+          - This will remove:
           - "  - PostgreSQL service"
           - "  - All databases and data"
           - "  - PostgreSQL installation"
           - "  - Configuration files"
           - "  - Log files"
-          - "=========================================="
-    
-    # ==========================================
-    # BACKUP BEFORE DESTRUCTION (Optional)
-    # ==========================================
-    
-    - name: Check if PostgreSQL is installed for backup
-      stat:
+          - ==========================================
+    - name: Check whether pg_dump binary exists
+      ansible.builtin.stat:
         path: "/opt/homebrew/opt/{{ postgres_formula }}/bin/pg_dump"
       register: pg_dump_exists
-    
-    - name: Check if PostgreSQL service is running for backup
-      shell: brew services list | grep "{{ postgres_service_name }}" | grep -q "started"
-      register: postgres_running_for_backup
+    - name: Collect Homebrew service status for backup decision
+      ansible.builtin.command:
+        argv: [brew, services, list]
+      register: brew_services_for_backup
       failed_when: false
       changed_when: false
       when: pg_dump_exists.stat.exists
-    
+    - name: Record whether target service is running for backup
+      ansible.builtin.set_fact:
+        postgres_running_for_backup: >-
+          {{
+            (brew_services_for_backup.stdout_lines | default([])
+            | select("match", "^" ~ postgres_service_name ~ "\\s+started\\b")
+            | list | length) > 0
+          }}
+      changed_when: false
+      when: pg_dump_exists.stat.exists
     - name: Create final backup of all databases
+      when:
+        - pg_dump_exists.stat.exists
+        - postgres_running_for_backup | default(false)
       block:
-        - name: Create backup timestamp directory
-          file:
+        - name: Create timestamped final backup directory
+          ansible.builtin.file:
             path: "{{ postgres_backup_dir }}/final_backup_{{ ansible_date_time.epoch }}"
             state: directory
-            mode: '0770'
+            mode: "0770"
           register: backup_dir
-          
-        - name: Backup application database
-          shell: |
-            /opt/homebrew/opt/{{ postgres_formula }}/bin/pg_dump -h localhost -p {{ postgres_port }} {{ app_database }} > {{ backup_dir.path }}/{{ app_database }}_final.sql
+        - name: Back up application database to SQL file
+          ansible.builtin.command:
+            argv:
+              - "/opt/homebrew/opt/{{ postgres_formula }}/bin/pg_dump"
+              - -h
+              - localhost
+              - -p
+              - "{{ postgres_port }}"
+              - -f
+              - "{{ backup_dir.path }}/{{ app_database }}_final.sql"
+              - "{{ app_database }}"
           environment:
             PGUSER: "{{ postgres_users[0].name }}"
             PGPASSWORD: "{{ postgres_users[0].password }}"
-          
-        - name: Display backup location
-          debug:
+          register: pg_dump_result
+          changed_when: pg_dump_result.rc == 0
+        - name: Display final backup location
+          ansible.builtin.debug:
             msg: "Final backup saved to: {{ backup_dir.path }}"
-      when: 
-        - pg_dump_exists.stat.exists
-        - postgres_running_for_backup.rc == 0
-    
-    # ==========================================
-    # STOP SERVICE
-    # ==========================================
-    
-    - name: Check if PostgreSQL service is running
-      shell: brew services list | grep "{{ postgres_service_name }}" | grep -q "started"
-      register: postgres_running
+    - name: Collect Homebrew service status for stop workflow
+      ansible.builtin.command:
+        argv: [brew, services, list]
+      register: brew_services
       failed_when: false
       changed_when: false
-
-    - name: Discover all Homebrew PostgreSQL services
-      shell: brew services list | awk '/^postgresql(@[0-9]+)? / {print $1}'
-      register: postgres_services
+    - name: Record whether configured PostgreSQL service is started
+      ansible.builtin.set_fact:
+        postgres_running: >-
+          {{
+            (brew_services.stdout_lines | default([])
+            | select("match", "^" ~ postgres_service_name ~ "\\s+started\\b")
+            | list | length) > 0
+          }}
       changed_when: false
-      
-    - name: Stop PostgreSQL service
-      shell: brew services stop {{ postgres_service_name }}
-      when: postgres_running.rc == 0
+    - name: Discover Homebrew PostgreSQL services
+      ansible.builtin.set_fact:
+        postgres_services: >-
+          {{
+            brew_services.stdout_lines | default([])
+            | select("match", "^postgresql(@[0-9]+)?\\s+")
+            | map("regex_replace", "\\s+.*$", "")
+            | list
+          }}
+      changed_when: false
+    - name: Stop configured PostgreSQL service
+      ansible.builtin.command:
+        argv: [brew, services, stop, "{{ postgres_service_name }}"]
+      when: postgres_running
       register: postgres_stopped
-
-    - name: Stop all discovered PostgreSQL services
-      shell: brew services stop {{ item }}
-      loop: "{{ postgres_services.stdout_lines | default([]) }}"
-      when: postgres_services.stdout_lines | length > 0
+      failed_when: false
+      changed_when: postgres_stopped.rc == 0
+    - name: Stop discovered PostgreSQL services
+      ansible.builtin.command:
+        argv: [brew, services, stop, "{{ item }}"]
+      loop: "{{ postgres_services | default([]) }}"
+      when: postgres_services | length > 0
       register: postgres_all_stopped
-      ignore_errors: yes
-      
-    - name: Wait for PostgreSQL to stop
-      wait_for:
+      failed_when: false
+      changed_when: true
+    - name: Wait for PostgreSQL port to stop
+      ansible.builtin.wait_for:
         port: "{{ postgres_port }}"
         state: stopped
         timeout: 30
-      when: postgres_stopped.changed | default(false)
-      ignore_errors: yes
-      
+      when: postgres_running
+      register: postgres_wait_for_stop
+      failed_when: false
+      changed_when: false
     - name: Check for remaining PostgreSQL processes
-      shell: "ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '"
+      ansible.builtin.command:
+        argv: [pgrep, -f, "/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: "]
       register: postgres_pids
       failed_when: false
       changed_when: false
-      
-    - name: Force kill any remaining PostgreSQL processes
-      shell: pkill -9 -f "postgres"
-      when: postgres_pids.stdout != ""
-      ignore_errors: yes
-      
+    - name: Force kill remaining PostgreSQL processes
+      ansible.builtin.command:
+        argv: [pkill, -9, -f, postgres]
+      when: postgres_pids.stdout | trim != ""
+      register: postgres_kill
+      failed_when: false
+      changed_when: postgres_kill.rc == 0
     - name: Verify PostgreSQL processes are terminated
-      shell: "ps aux | rg '/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: '"
+      ansible.builtin.command:
+        argv: [pgrep, -f, "/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: "]
       register: postgres_pids_after
       changed_when: false
-      ignore_errors: yes
-      failed_when: postgres_pids_after.rc == 0 and postgres_pids_after.stdout != ""
-    
-    # ==========================================
-    # REMOVE DATA AND CONFIGURATION
-    # ==========================================
-    
+      failed_when: postgres_pids_after.rc == 0 and postgres_pids_after.stdout | trim != ""
     - name: Remove PostgreSQL data directory
-      file:
+      ansible.builtin.file:
         path: "{{ postgres_data_dir }}"
         state: absent
-      ignore_errors: yes
-      
     - name: Remove PostgreSQL configuration directory
-      file:
+      ansible.builtin.file:
         path: "{{ postgres_conf_dir }}"
         state: absent
-      ignore_errors: yes
-      
     - name: Remove PostgreSQL log directory
-      file:
+      ansible.builtin.file:
         path: "{{ postgres_log_dir }}"
         state: absent
-      ignore_errors: yes
-      
-    - name: List backup directory size
-      shell: |
-        if [ -d "{{ postgres_backup_dir }}" ]; then
-          du -sh {{ postgres_backup_dir }}
-        else
-          echo "No backups found"
-        fi
+    - name: Check whether backup directory exists
+      ansible.builtin.stat:
+        path: "{{ postgres_backup_dir }}"
+      register: backup_dir_exists
+    - name: Measure backup directory size
+      ansible.builtin.command:
+        argv: [du, -sh, "{{ postgres_backup_dir }}"]
+      when: backup_dir_exists.stat.exists
       register: backup_size
       changed_when: false
-      ignore_errors: yes
-      
+      failed_when: false
+    - name: Record backup size message when no backups exist
+      ansible.builtin.set_fact:
+        backup_size: { stdout: "No backups found" }
+      when: not backup_dir_exists.stat.exists
+      changed_when: false
     - name: Display backup information
-      debug:
+      ansible.builtin.debug:
         msg: "Backup directory: {{ backup_size.stdout }}"
       when: backup_size.stdout is defined
-      
-    - name: Remove backup directory (optional - commented out for safety)
-      debug:
+    - name: Display preserved backup reminder
+      ansible.builtin.debug:
         msg: "Backups preserved at: {{ postgres_backup_dir }}. Remove manually if desired."
-    
-    # Uncomment to remove backups:
-    # - name: Remove PostgreSQL backup directory
-    #   file:
-    #     path: "{{ postgres_backup_dir }}"
-    #     state: absent
-    
-    # ==========================================
-    # UNINSTALL POSTGRESQL
-    # ==========================================
-    
-    - name: Check if PostgreSQL {{ postgres_version }} is installed
-      shell: brew list --formula | grep -q "^{{ postgres_formula }}$"
+    - name: Check whether target PostgreSQL formula is installed
+      ansible.builtin.command:
+        argv: [brew, list, --formula, "{{ postgres_formula }}"]
       register: postgres_installed
       failed_when: false
       changed_when: false
-
-    - name: Discover installed PostgreSQL formulas
-      shell: brew list --formula | rg '^postgresql(@[0-9]+)?$'
-      register: postgres_formulas
+    - name: Collect installed Homebrew formulas
+      ansible.builtin.command:
+        argv: [brew, list, --formula]
+      register: all_formulas
       failed_when: false
       changed_when: false
-      
-    - name: Uninstall PostgreSQL {{ postgres_version }}
-      homebrew:
+    - name: Record installed PostgreSQL formulas
+      ansible.builtin.set_fact:
+        postgres_formulas: >-
+          {{
+            all_formulas.stdout_lines | default([])
+            | select("match", "^postgresql(@[0-9]+)?$")
+            | list
+          }}
+      changed_when: false
+    - name: Uninstall configured PostgreSQL formula
+      community.general.homebrew:
         name: "{{ postgres_formula }}"
         state: absent
       when: postgres_installed.rc == 0
-
-    - name: Uninstall all discovered PostgreSQL formulas
-      homebrew:
+    - name: Uninstall discovered PostgreSQL formulas
+      community.general.homebrew:
         name: "{{ item }}"
         state: absent
-      loop: "{{ postgres_formulas.stdout_lines | default([]) }}"
-      when: postgres_formulas.rc == 0 and postgres_formulas.stdout_lines | length > 0
-      ignore_errors: yes
-      
-    - name: Remove any remaining PostgreSQL files in Homebrew directories
-      shell: |
-        timestamp=$(date +%Y-%m-%d-%H.%M.%S)
+      loop: "{{ postgres_formulas | default([]) }}"
+      when: postgres_formulas | length > 0
+    - name: Move lingering PostgreSQL paths to Trash
+      ansible.builtin.shell: |
+        set -euo pipefail
+        timestamp="$(date +%Y-%m-%d-%H.%M.%S)"
         trash_dir="$HOME/.Trash/postgres_cleanup_$timestamp"
+        moved=0
         mkdir -p "$trash_dir"
         for path in \
           /opt/homebrew/var/postgresql@* \
@@ -216,47 +229,54 @@
           /usr/local/etc/postgres@* \
           /usr/local/var/log/postgres@*; do
           if [ -e "$path" ]; then
-            mv "$path" "$trash_dir/" || true
+            mv "$path" "$trash_dir/"
+            moved=1
           fi
         done
-      ignore_errors: yes
-      
-    - name: Clean up Homebrew
-      shell: brew cleanup
-      ignore_errors: yes
-    
-    # ==========================================
-    # VERIFICATION
-    # ==========================================
-    
-    - name: Verify PostgreSQL is removed
-      shell: brew list --formula | grep "^{{ postgres_formula }}$"
+        if [ "$moved" -eq 1 ]; then echo "moved:$trash_dir"; else echo "moved:none"; fi
+      register: postgres_cleanup_move
+      changed_when: "'moved:' in postgres_cleanup_move.stdout and 'moved:none' not in postgres_cleanup_move.stdout"
+    - name: Run Homebrew cleanup
+      ansible.builtin.command:
+        argv: [brew, cleanup]
+      register: brew_cleanup
+      failed_when: false
+      changed_when: brew_cleanup.stdout | trim != ""
+    - name: Verify target PostgreSQL formula is removed
+      ansible.builtin.command:
+        argv: [brew, list, --formula, "{{ postgres_formula }}"]
       register: verify_removal
       failed_when: false
       changed_when: false
-      
-    - name: Check if port is free
-      wait_for:
+    - name: Check whether PostgreSQL port is free
+      ansible.builtin.wait_for:
         port: "{{ postgres_port }}"
         state: stopped
         timeout: 5
-      ignore_errors: yes
-      
+      register: postgres_port_free
+      failed_when: false
+      changed_when: false
     - name: Display teardown completion message
-      debug:
+      ansible.builtin.debug:
         msg:
-          - "=========================================="
-          - "PostgreSQL Teardown Complete!"
-          - "=========================================="
+          - ==========================================
+          - PostgreSQL Teardown Complete!
+          - ==========================================
           - "PostgreSQL {{ postgres_version }} has been removed"
-          - "Service: Stopped and removed"
-          - "Data: Removed"
-          - "Config: Removed"
-          - "Logs: Removed"
+          - Service: Stopped and removed
+          - Data: Removed
+          - Config: Removed
+          - Logs: Removed
           - "Backups: Preserved at {{ postgres_backup_dir }}"
           - ""
-          - "Status: {{ 'Successfully removed' if verify_removal.rc != 0 else 'WARNING: PostgreSQL may still be installed' }}"
-          - "=========================================="
-
-
-
+          - >-
+            Status: {{
+              'Successfully removed' if verify_removal.rc != 0
+              else 'WARNING: PostgreSQL may still be installed'
+            }}
+          - >-
+            Port {{ postgres_port }}: {{
+              'free' if postgres_port_free.failed is not defined or not postgres_port_free.failed
+              else 'still in use'
+            }}
+          - ==========================================
