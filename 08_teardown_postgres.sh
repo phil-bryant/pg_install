@@ -29,6 +29,33 @@ if [ ! -d "$VENV_DIR" ]; then
     exit 1
 fi
 
+# Check if virtual environment is active
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    #R200: Bail with activation guidance when no virtual environment is active.
+    echo "❌ ERROR: No virtual environment is currently active!"
+    echo ""
+    echo "Please activate the virtual environment first:"
+    echo "  source ${VENV_DIR}/bin/activate"
+    echo ""
+    echo "Then run this script again."
+    exit 1
+fi
+
+# Verify the active venv is the expected one
+EXPECTED_VENV_PATH=$(cd "$VENV_DIR" && pwd -P)
+CURRENT_VENV_PATH=$(cd "$VIRTUAL_ENV" && pwd -P 2>/dev/null || echo "$VIRTUAL_ENV")
+if [ "$CURRENT_VENV_PATH" != "$EXPECTED_VENV_PATH" ]; then
+    #R210: Bail with deactivate/reactivate guidance when a different venv is active.
+    echo "❌ ERROR: A different virtual environment is active!"
+    echo "Expected: $EXPECTED_VENV_PATH"
+    echo "Current:  $CURRENT_VENV_PATH"
+    echo ""
+    echo "Please deactivate and reactivate the correct virtual environment:"
+    echo "  deactivate"
+    echo "  source ${VENV_DIR}/bin/activate"
+    exit 1
+fi
+
 if [ ! -x "$ANSIBLE_PLAYBOOK" ]; then
     echo "❌ ERROR: ${ANSIBLE_PLAYBOOK} not found or not executable."
     echo ""
@@ -59,6 +86,7 @@ echo "============================================================"
 echo ""
 
 # Confirmation prompt
+#R220: Require explicit 'yes' confirmation before invoking destructive teardown.
 read -r -p "Type 'yes' to confirm teardown (or anything else to cancel): " CONFIRM
 
 if [ "$CONFIRM" != "yes" ]; then
@@ -72,6 +100,7 @@ echo "Running PostgreSQL teardown playbook..."
 echo ""
 
 # Run the Ansible playbook with confirmation
+#R001: Invoke teardown.yml playbook to orchestrate destructive cleanup.
 if "$ANSIBLE_PLAYBOOK" teardown.yml -e confirm_teardown=yes; then
     echo ""
     echo "============================================================"

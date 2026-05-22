@@ -1,0 +1,457 @@
+---
+# tasks/tls_material.yml — Slice 3b: disk-backend TLS material provisioning.
+# Imported by setup.yml only when postgres_ssl == "on", so this whole file is
+# inert until that flag flips (Slice 3d).
+
+- name: Validate TLS storage backend selection
+  ansible.builtin.assert:
+    that: postgres_ssl_backend in ["disk", "1psa"]
+    fail_msg: >-
+      postgres_ssl_backend must be "disk" or "1psa";
+      got "{{ postgres_ssl_backend }}".
+
+- name: Create staging directory for TLS material
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: pg_tls
+  register: tls_stage
+  changed_when: false
+
+- name: Set staged TLS file paths
+  ansible.builtin.set_fact:
+    tls_stage_dir: "{{ tls_stage.path }}"
+    tls_stage_ca_key: "{{ tls_stage.path }}/root.key"
+    tls_stage_ca_crt: "{{ tls_stage.path }}/root.crt"
+    tls_stage_srv_key: "{{ tls_stage.path }}/server.key"
+    tls_stage_srv_crt: "{{ tls_stage.path }}/server.crt"
+
+- name: Ensure disk-backend TLS directory exists  # R350
+  ansible.builtin.file:
+    path: "{{ postgres_ssl_disk_dir }}"
+    state: directory
+    mode: "0700"
+  when: postgres_ssl_backend == "disk"
+
+- name: Stat existing disk-backend TLS files  # R350
+  ansible.builtin.stat: {path: "{{ item }}"}
+  loop:
+    - "{{ postgres_ssl_disk_dir }}/server.crt"
+    - "{{ postgres_ssl_disk_dir }}/server.key"
+    - "{{ postgres_ssl_disk_dir }}/root.crt"
+  register: tls_disk_stats
+  when: postgres_ssl_backend == "disk"
+
+- name: Inspect existing disk cert expiry  # R340
+  ansible.builtin.command:
+    argv: [openssl, x509, -enddate, -noout, -in, "{{ postgres_ssl_disk_dir }}/server.crt"]
+  register: tls_disk_enddate
+  failed_when: false
+  changed_when: false
+  when:
+    - postgres_ssl_backend == "disk"
+    - tls_disk_stats.results[0].stat.exists | default(false)
+
+- name: Stage existing disk-backend material when present  # R350
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0600"
+    remote_src: true
+  loop:
+    - {src: "{{ postgres_ssl_disk_dir }}/server.crt", dest: "{{ tls_stage_srv_crt }}"}
+    - {src: "{{ postgres_ssl_disk_dir }}/server.key", dest: "{{ tls_stage_srv_key }}"}
+    - {src: "{{ postgres_ssl_disk_dir }}/root.crt", dest: "{{ tls_stage_ca_crt }}"}
+  when:
+    - postgres_ssl_backend == "disk"
+    - tls_disk_stats.results[0].stat.exists | default(false)
+    - tls_disk_stats.results[1].stat.exists | default(false)
+    - tls_disk_stats.results[2].stat.exists | default(false)
+  failed_when: false
+
+# ---------- 1psa backend: read existing material ----------
+- name: Read 1psa cert field  # R400
+  ansible.builtin.command:
+    argv: [../1psa/bin/1psa, -f, "{{ postgres_ssl_1psa_item }}", "{{ postgres_ssl_1psa_field_cert }}"]
+  register: tls_1psa_cert
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when: postgres_ssl_backend == "1psa"
+
+- name: Read 1psa key field  # R400
+  ansible.builtin.command:
+    argv: [../1psa/bin/1psa, -f, "{{ postgres_ssl_1psa_item }}", "{{ postgres_ssl_1psa_field_key }}"]
+  register: tls_1psa_key
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when: postgres_ssl_backend == "1psa"
+
+- name: Read 1psa ca field  # R400
+  ansible.builtin.command:
+    argv: [../1psa/bin/1psa, -f, "{{ postgres_ssl_1psa_item }}", "{{ postgres_ssl_1psa_field_ca }}"]
+  register: tls_1psa_ca
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when: postgres_ssl_backend == "1psa"
+
+- name: Stage 1psa cert when present  # R400
+  ansible.builtin.copy:
+    dest: "{{ tls_stage_srv_crt }}"
+    content: "{{ tls_1psa_cert.stdout }}"
+    mode: "0600"
+  when:
+    - postgres_ssl_backend == "1psa"
+    - (tls_1psa_cert.rc | default(1)) == 0
+    - (tls_1psa_cert.stdout | default('') | trim) != ""
+  no_log: true
+
+- name: Stage 1psa key when present  # R400
+  ansible.builtin.copy:
+    dest: "{{ tls_stage_srv_key }}"
+    content: "{{ tls_1psa_key.stdout }}"
+    mode: "0600"
+  when:
+    - postgres_ssl_backend == "1psa"
+    - (tls_1psa_key.rc | default(1)) == 0
+    - (tls_1psa_key.stdout | default('') | trim) != ""
+  no_log: true
+
+- name: Stage 1psa ca when present  # R400
+  ansible.builtin.copy:
+    dest: "{{ tls_stage_ca_crt }}"
+    content: "{{ tls_1psa_ca.stdout }}"
+    mode: "0600"
+  when:
+    - postgres_ssl_backend == "1psa"
+    - (tls_1psa_ca.rc | default(1)) == 0
+    - (tls_1psa_ca.stdout | default('') | trim) != ""
+  no_log: true
+
+- name: Inspect 1psa staged cert expiry  # R340
+  ansible.builtin.command:
+    argv: [openssl, x509, -enddate, -noout, -in, "{{ tls_stage_srv_crt }}"]
+  register: tls_1psa_enddate
+  failed_when: false
+  changed_when: false
+  when:
+    - postgres_ssl_backend == "1psa"
+    - (tls_1psa_cert.stdout | default('') | trim) != ""
+
+- name: Decide whether material is present  # R340
+  ansible.builtin.set_fact:
+    tls_have_material: >-
+      {{
+        (postgres_ssl_backend == "disk"
+          and tls_disk_stats.results[0].stat.exists | default(false)
+          and tls_disk_stats.results[1].stat.exists | default(false))
+        or
+        (postgres_ssl_backend == "1psa"
+          and (tls_1psa_cert.stdout | default('') | trim) != ""
+          and (tls_1psa_key.stdout | default('') | trim) != "")
+      }}
+    tls_enddate_raw: >-
+      {{
+        (tls_disk_enddate.stdout | default(''))
+        if postgres_ssl_backend == "disk"
+        else (tls_1psa_enddate.stdout | default(''))
+      }}
+
+- name: Compute days remaining on cert  # R340
+  ansible.builtin.set_fact:
+    tls_days_remaining: >-
+      {{
+        (((tls_enddate_raw | regex_replace('^notAfter=', '')
+            | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp()
+          - ansible_date_time.epoch | int) / 86400) | int
+      }}
+  when:
+    - tls_have_material
+    - (tls_enddate_raw | trim) != ""
+  failed_when: false
+
+- name: Decide whether regeneration is needed  # R340
+  ansible.builtin.set_fact:
+    tls_regenerate_now: >-
+      {{
+        (postgres_ssl_regenerate | bool)
+        or (not tls_have_material)
+        or ((tls_days_remaining | default(-1) | int) < (postgres_ssl_renew_within_days | int))
+      }}
+
+- name: Display TLS plan
+  ansible.builtin.debug:
+    msg:
+      - "TLS backend: {{ postgres_ssl_backend }}"
+      - "Have material: {{ tls_have_material }}"
+      - "Days remaining: {{ tls_days_remaining | default('n/a') }}"
+      - "Regenerate now: {{ tls_regenerate_now }}"
+      - "Force flag (--regenerate-cert): {{ postgres_ssl_regenerate }}"
+
+- name: Generate new TLS material  # R330
+  when: tls_regenerate_now
+  block:
+    - name: Build openssl SAN extfile  # R330
+      ansible.builtin.copy:
+        dest: "{{ tls_stage_dir }}/san.cnf"
+        mode: "0600"
+        content: |
+          [req]
+          distinguished_name = dn
+          prompt = no
+          [dn]
+          CN = {{ postgres_ssl_cn }}
+          [v3_ca]
+          basicConstraints = critical, CA:TRUE
+          keyUsage = critical, keyCertSign, cRLSign
+          subjectKeyIdentifier = hash
+          [v3_srv]
+          basicConstraints = CA:FALSE
+          keyUsage = critical, digitalSignature, keyEncipherment
+          extendedKeyUsage = serverAuth
+          subjectAltName = {{ postgres_ssl_san | join(',') }}
+
+    - name: Generate root CA private key  # R330
+      ansible.builtin.command:
+        argv: [openssl, genrsa, -out, "{{ tls_stage_ca_key }}", "{{ postgres_ssl_key_bits }}"]
+      changed_when: true
+
+    - name: Generate self-signed root CA cert  # R330
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -new
+          - -nodes
+          - -key
+          - "{{ tls_stage_ca_key }}"
+          - -sha256
+          - -days
+          - "{{ postgres_ssl_days }}"
+          - -subj
+          - "/CN=pg_install local CA ({{ postgres_ssl_cn }})"
+          - -extensions
+          - v3_ca
+          - -config
+          - "{{ tls_stage_dir }}/san.cnf"
+          - -out
+          - "{{ tls_stage_ca_crt }}"
+      changed_when: true
+
+    - name: Generate server private key  # R330
+      ansible.builtin.command:
+        argv: [openssl, genrsa, -out, "{{ tls_stage_srv_key }}", "{{ postgres_ssl_key_bits }}"]
+      changed_when: true
+
+    - name: Generate server CSR  # R330
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -new
+          - -key
+          - "{{ tls_stage_srv_key }}"
+          - -subj
+          - "/CN={{ postgres_ssl_cn }}"
+          - -out
+          - "{{ tls_stage_dir }}/server.csr"
+          - -config
+          - "{{ tls_stage_dir }}/san.cnf"
+      changed_when: true
+
+    - name: Sign server cert with local CA  # R330
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -req
+          - -in
+          - "{{ tls_stage_dir }}/server.csr"
+          - -CA
+          - "{{ tls_stage_ca_crt }}"
+          - -CAkey
+          - "{{ tls_stage_ca_key }}"
+          - -CAcreateserial
+          - -days
+          - "{{ postgres_ssl_days }}"
+          - -sha256
+          - -extfile
+          - "{{ tls_stage_dir }}/san.cnf"
+          - -extensions
+          - v3_srv
+          - -out
+          - "{{ tls_stage_srv_crt }}"
+      changed_when: true
+
+    - name: Move existing disk TLS files to ~/.Trash before overwrite  # R350
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ts="$(date +%Y-%m-%d-%H.%M.%S)"
+        trash="$HOME/.Trash/pg_install_tls_$ts"
+        moved=0
+        for f in server.crt server.key root.crt root.key root.srl; do
+          if [ -e "{{ postgres_ssl_disk_dir }}/$f" ]; then
+            if [ "$moved" -eq 0 ]; then mkdir -p "$trash"; fi
+            mv "{{ postgres_ssl_disk_dir }}/$f" "$trash/"
+            moved=1
+          fi
+        done
+        if [ "$moved" -eq 1 ]; then echo "moved:$trash"; else echo "moved:none"; fi
+      register: tls_disk_trash
+      changed_when: "'moved:' in tls_disk_trash.stdout and 'moved:none' not in tls_disk_trash.stdout"
+      when: postgres_ssl_backend == "disk"
+
+    - name: Install fresh disk TLS files  # R350
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ postgres_ssl_disk_dir }}/{{ item.dest }}"
+        mode: "{{ item.mode }}"
+        remote_src: true
+      loop:
+        - {src: "{{ tls_stage_srv_crt }}", dest: "server.crt", mode: "0600"}
+        - {src: "{{ tls_stage_srv_key }}", dest: "server.key", mode: "0600"}
+        - {src: "{{ tls_stage_ca_crt }}", dest: "root.crt", mode: "0600"}
+        - {src: "{{ tls_stage_ca_key }}", dest: "root.key", mode: "0600"}
+      when: postgres_ssl_backend == "disk"
+
+    # ---------- 1psa backend: persist regenerated material ----------
+    - name: Detect op (1Password CLI)  # R420
+      ansible.builtin.command: {argv: [which, op]}
+      register: op_which
+      failed_when: false
+      changed_when: false
+      when: postgres_ssl_backend == "1psa"
+
+    - name: Fail when op CLI unavailable for 1psa write-back  # R420
+      ansible.builtin.fail:
+        msg: >-
+          postgres_ssl_backend=1psa requires the 1Password CLI ('op') to write
+          regenerated TLS material. Install with: brew install --cask 1password-cli
+          and run 'op signin' (or use a service-account token).
+      when:
+        - postgres_ssl_backend == "1psa"
+        - op_which.rc != 0
+
+    - name: Read regenerated cert content  # R410
+      ansible.builtin.slurp: {src: "{{ tls_stage_srv_crt }}"}
+      register: tls_new_cert
+      no_log: true
+      when: postgres_ssl_backend == "1psa"
+
+    - name: Read regenerated key content  # R410
+      ansible.builtin.slurp: {src: "{{ tls_stage_srv_key }}"}
+      register: tls_new_key
+      no_log: true
+      when: postgres_ssl_backend == "1psa"
+
+    - name: Read regenerated ca content  # R410
+      ansible.builtin.slurp: {src: "{{ tls_stage_ca_crt }}"}
+      register: tls_new_ca
+      no_log: true
+      when: postgres_ssl_backend == "1psa"
+
+    - name: Check whether 1psa item exists  # R410
+      ansible.builtin.command:
+        argv: >-
+          {{ ['op', 'item', 'get', postgres_ssl_1psa_item]
+             + (['--vault', postgres_ssl_1psa_vault] if postgres_ssl_1psa_vault | length > 0 else [])
+             + ['--format', 'json'] }}
+      register: op_item_get
+      failed_when: false
+      changed_when: false
+      no_log: true
+      when: postgres_ssl_backend == "1psa"
+
+    - name: Path for op stderr capture  # R410
+      ansible.builtin.set_fact:
+        op_stderr_file: "{{ tls_stage_dir }}/op.stderr"
+      when: postgres_ssl_backend == "1psa"
+
+    - name: Run op item create|edit via wrapper that writes stderr to file  # R410
+      ansible.builtin.shell: |
+        set -u
+        : > "{{ op_stderr_file }}"
+        if [ "{{ (op_item_get.rc | default(1)) }}" = "0" ]; then
+          op_action=( op item edit "{{ postgres_ssl_1psa_item }}" )
+        else
+          op_action=( op item create
+                      --category "Secure Note"
+                      --title "{{ postgres_ssl_1psa_item }}" )
+        fi
+        if [ -n "{{ postgres_ssl_1psa_vault }}" ]; then
+          op_action+=( --vault "{{ postgres_ssl_1psa_vault }}" )
+        fi
+        op_action+=(
+          "{{ postgres_ssl_1psa_field_cert }}[text]=${PG_CERT}"
+          "{{ postgres_ssl_1psa_field_key }}[concealed]=${PG_KEY}"
+          "{{ postgres_ssl_1psa_field_ca }}[text]=${PG_CA}"
+        )
+        "${op_action[@]}" </dev/null >/dev/null 2>"{{ op_stderr_file }}"
+      args: {executable: /bin/bash}
+      environment:
+        PG_CERT: "{{ tls_new_cert.content | b64decode }}"
+        PG_KEY: "{{ tls_new_key.content | b64decode }}"
+        PG_CA: "{{ tls_new_ca.content | b64decode }}"
+      register: op_write
+      failed_when: false
+      changed_when: op_write.rc == 0
+      no_log: true
+      when: postgres_ssl_backend == "1psa"
+
+    - name: Read op stderr file when write failed  # R410
+      ansible.builtin.slurp: {src: "{{ op_stderr_file }}"}
+      register: op_stderr_slurp
+      when:
+        - postgres_ssl_backend == "1psa"
+        - (op_write.rc | default(0)) != 0
+
+    - name: Surface op write failure with stderr  # R410
+      ansible.builtin.fail:
+        msg: |
+          op write failed (rc={{ op_write.rc | default('n/a') }}). Stderr:
+          {{ op_stderr_slurp.content | b64decode | trim }}
+      when:
+        - postgres_ssl_backend == "1psa"
+        - (op_write.rc | default(0)) != 0
+
+- name: Install server.crt into PG data dir  # R360
+  ansible.builtin.copy:
+    src: "{{ tls_stage_srv_crt }}"
+    dest: "{{ postgres_data_dir }}/server.crt"
+    mode: "0600"
+    remote_src: true
+  notify: restart postgresql
+
+- name: Install server.key into PG data dir  # R360
+  ansible.builtin.copy:
+    src: "{{ tls_stage_srv_key }}"
+    dest: "{{ postgres_data_dir }}/server.key"
+    mode: "0600"
+    remote_src: true
+  notify: restart postgresql
+
+- name: Stat staged root.crt  # R360
+  ansible.builtin.stat: {path: "{{ tls_stage_ca_crt }}"}
+  register: tls_stage_ca_stat
+
+- name: Install root.crt into PG data dir  # R360
+  ansible.builtin.copy:
+    src: "{{ tls_stage_ca_crt }}"
+    dest: "{{ postgres_data_dir }}/root.crt"
+    mode: "0600"
+    remote_src: true
+  when: tls_stage_ca_stat.stat.exists
+  notify: restart postgresql
+
+- name: Move TLS staging dir to ~/.Trash  # no-rm
+  ansible.builtin.shell: |
+    set -euo pipefail
+    ts="$(date +%Y-%m-%d-%H.%M.%S)"
+    trash="$HOME/.Trash/pg_install_tls_stage_$ts"
+    mkdir -p "$trash"
+    mv "{{ tls_stage_dir }}" "$trash/"
+    echo "moved:$trash"
+  register: tls_stage_trash
+  changed_when: "'moved:' in tls_stage_trash.stdout"

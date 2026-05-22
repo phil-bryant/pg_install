@@ -155,15 +155,41 @@ Expected: service is `started` for `postgresql@17` and `SELECT version()` report
 
 ### Connect to Database
 
+PostgreSQL is now stood up with TLS required by default. Cert and key material is auto-generated on first run and renewed automatically when within 30 days of expiry. See "TLS / SSL" below for the knobs.
+
 ```bash
-# Connect as app_owner (full access to myapp_db)
-psql -h localhost -p 5432 -U app_owner -d myapp_db
+# Connect as app_owner (full access to myapp_db) — TLS verify-ca path
+psql 'host=localhost port=5432 user=app_owner dbname=myapp_db sslmode=verify-ca sslrootcert=./.secrets/tls/root.crt'
 
-# Connect as app_user (read-write access)
-psql -h localhost -p 5432 -U app_user -d myapp_db
+# Or with sslmode=require (no CA verification, simpler)
+psql 'host=localhost port=5432 user=app_owner dbname=myapp_db sslmode=require'
 
-# Connect as app_readonly (read-only access)
-psql -h localhost -p 5432 -U app_readonly -d myapp_db
+# app_user (read-write access)
+psql 'host=localhost port=5432 user=app_user dbname=myapp_db sslmode=require'
+
+# app_readonly (read-only access)
+psql 'host=localhost port=5432 user=app_readonly dbname=myapp_db sslmode=require'
+```
+
+To verify TLS is enforced after setup:
+```bash
+# Should be rejected by pg_hba.conf:
+psql 'host=localhost port=5432 user=app_owner dbname=myapp_db sslmode=disable'
+```
+
+### TLS / SSL
+
+| Flag                          | Effect                                                                           |
+|-------------------------------|----------------------------------------------------------------------------------|
+| `--regenerate-cert`           | Force a fresh CA + server cert/key on this run.                                  |
+| `--ssl-backend=disk`          | Store TLS material under `./.secrets/tls/` (gitignored). **Default.**            |
+| `--ssl-backend=1psa`          | Store TLS material in 1Password (reads via `1psa`, writes via `op` CLI).         |
+| `--ssl-dir=PATH`              | Override the disk-backend directory.                                             |
+| `--ssl-1psa-item=NAME`        | Override the 1Password item name (default `localhost_postgres_tls`).             |
+
+To disable TLS for a specific run (not recommended), use the playbook directly:
+```bash
+ansible-playbook setup.yml -e postgres_ssl=off
 ```
 
 ### Teardown (Complete Cleanup)

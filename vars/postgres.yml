@@ -53,8 +53,35 @@ postgres_roles:
     state: present
 
 # Security settings
-postgres_ssl: "off"  # Set to 'on' for production
+postgres_ssl: "on"
 postgres_password_encryption: "scram-sha-256"  # pragma: allowlist secret
+
+# TLS / SSL material (R300-series in 07_standup_postgres-requirements.md)
+# These defaults are inert while postgres_ssl == "off"; later slices wire them
+# into postgresql.conf and pg_hba.conf when ssl is enabled.
+postgres_ssl_min_protocol_version: "TLSv1.3"
+postgres_ssl_regenerate: false                # set true via --regenerate-cert
+postgres_ssl_renew_within_days: 30            # auto-regenerate when within window
+postgres_ssl_cn: "localhost"
+postgres_ssl_san:
+  - "DNS:localhost"
+  - "IP:127.0.0.1"
+  - "IP:::1"
+postgres_ssl_days: 825                        # browser/Apple-friendly cert lifetime cap
+postgres_ssl_key_bits: 4096
+
+# Storage backend for TLS material: "disk" or "1psa"
+postgres_ssl_backend: "disk"
+
+# disk backend (gitignored under playbook_dir)
+postgres_ssl_disk_dir: "{{ playbook_dir }}/.secrets/tls"
+
+# 1psa backend (1Password Secure Note; reads via 1psa, writes via op CLI)
+postgres_ssl_1psa_item: "localhost_postgres_tls"
+postgres_ssl_1psa_vault: "odus"               # required for service-account sessions; "" for default account vault
+postgres_ssl_1psa_field_cert: "cert"
+postgres_ssl_1psa_field_key: "key"
+postgres_ssl_1psa_field_ca: "ca"
 
 # Backup settings
 postgres_backup_dir: "/opt/homebrew/var/backups/postgres"

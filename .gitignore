@@ -17,6 +17,9 @@ backups/
 *.sql.backup
 *.sql.gz
 
+# TLS material (R350: disk backend default storage)
+.secrets/
+
 # Python
 __pycache__/
 *.py[cod]

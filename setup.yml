@@ -66,7 +66,7 @@
         postgres_service_started: >-
           {{
             (brew_services.stdout_lines | default([])
-            | select("match", "^" ~ postgres_service_name ~ "\\s+started\\b")
+            | select("match", "^" ~ postgres_service_name ~ "\s+started\b")
             | list | length) > 0
           }}
       changed_when: false
@@ -108,32 +108,19 @@
         state: directory
         mode: "0750"
       when: postgres_data_dir_exists.stat.exists
-    - name: Discover PostgreSQL data files
-      ansible.builtin.find:
-        paths: "{{ postgres_data_dir }}"
-        recurse: true
-        file_type: file
+    - name: Set permissions on PostgreSQL data files (bulk chmod 0640)
+      ansible.builtin.command:
+        argv: [find, "{{ postgres_data_dir }}", -type, f, -exec, chmod, "0640", "{}", +]
       when: postgres_data_dir_exists.stat.exists
-      register: postgres_data_files
-    - name: Discover PostgreSQL data directories
-      ansible.builtin.find:
-        paths: "{{ postgres_data_dir }}"
-        recurse: true
-        file_type: directory
+      changed_when: false
+    - name: Set permissions on PostgreSQL data directories (bulk chmod 0750)
+      ansible.builtin.command:
+        argv: [find, "{{ postgres_data_dir }}", -type, d, -exec, chmod, "0750", "{}", +]
       when: postgres_data_dir_exists.stat.exists
-      register: postgres_data_dirs
-    - name: Set permissions on PostgreSQL data files
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        mode: "0640"
-      loop: "{{ postgres_data_files.files | default([]) }}"
-      when: postgres_data_dir_exists.stat.exists
-    - name: Set permissions on PostgreSQL data directories
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        mode: "0750"
-      loop: "{{ postgres_data_dirs.files | default([]) }}"
-      when: postgres_data_dir_exists.stat.exists
+      changed_when: false
+    - name: Provision TLS material for PostgreSQL
+      ansible.builtin.import_tasks: tasks/tls_material.yml
+      when: postgres_ssl == "on"
     - name: Start PostgreSQL service when stopped
       ansible.builtin.command:
         argv: [brew, services, start, "{{ postgres_service_name }}"]
@@ -174,6 +161,40 @@
         path: "{{ postgres_data_dir }}/postgresql.conf"
         regexp: "^#?password_encryption\\s*="
         line: "password_encryption = {{ postgres_password_encryption }}"
+      notify: restart postgresql
+    - name: Set postgresql.conf ssl
+      ansible.builtin.lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: "^#?ssl\\s*="
+        line: "ssl = {{ postgres_ssl }}"
+      notify: restart postgresql
+    - name: Set postgresql.conf ssl_cert_file
+      ansible.builtin.lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: "^#?ssl_cert_file\\s*="
+        line: "ssl_cert_file = 'server.crt'"
+      when: postgres_ssl == "on"
+      notify: restart postgresql
+    - name: Set postgresql.conf ssl_key_file
+      ansible.builtin.lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: "^#?ssl_key_file\\s*="
+        line: "ssl_key_file = 'server.key'"
+      when: postgres_ssl == "on"
+      notify: restart postgresql
+    - name: Set postgresql.conf ssl_ca_file
+      ansible.builtin.lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: "^#?ssl_ca_file\\s*="
+        line: "ssl_ca_file = 'root.crt'"
+      when: postgres_ssl == "on"
+      notify: restart postgresql
+    - name: Set postgresql.conf ssl_min_protocol_version
+      ansible.builtin.lineinfile:
+        path: "{{ postgres_data_dir }}/postgresql.conf"
+        regexp: "^#?ssl_min_protocol_version\\s*="
+        line: "ssl_min_protocol_version = '{{ postgres_ssl_min_protocol_version }}'"
+      when: postgres_ssl == "on"
       notify: restart postgresql
     - name: Set postgresql.conf logging block
       ansible.builtin.blockinfile:
@@ -349,10 +370,19 @@
         dest: "{{ postgres_data_dir }}/pg_hba.conf"
         content: |
           # TYPE  DATABASE        USER            ADDRESS                 METHOD
+          {% if postgres_ssl == "on" %}
+          # ssl=on: require TLS for host connections, reject non-TLS host connections.
+          local     all all                                  scram-sha-256
+          hostssl   all all 127.0.0.1/32                     scram-sha-256
+          hostssl   all all ::1/128                           scram-sha-256
+          hostnossl all all all                              reject
+          host      all all 0.0.0.0/0                        reject
+          {% else %}
           local   all             all                                     scram-sha-256
           host    all             all             127.0.0.1/32            scram-sha-256
           host    all             all             ::1/128                 scram-sha-256
           host    all             all             0.0.0.0/0               reject
+          {% endif %}
         backup: true
         mode: "0640"
       notify: restart postgresql
@@ -373,7 +403,7 @@
         msg: >-
           {{
             final_status.stdout_lines | default([])
-            | select("search", "^" ~ postgres_service_name ~ "\\s+")
+            | select("search", "^" ~ postgres_service_name ~ "\s+")
             | list
           }}
     - name: Query PostgreSQL version string

@@ -16,7 +16,7 @@ cd "$SCRIPT_DIR"
 REPORT_DIR="${SECURITY_REPORT_DIR:-./.security-reports}"
 RUN_SAST="${RUN_SAST:-true}"
 RUN_ANSIBLE_CHECKS="${RUN_ANSIBLE_CHECKS:-true}"
-DETECT_SECRETS_EXCLUDE_FILES_REGEX="${DETECT_SECRETS_EXCLUDE_FILES_REGEX:-(^|/)requirements/.*-requirements\\.md$|(^|/)\\.git/|(^|/)pg_install-venv/|(^|/)\\.venv/|(^|/)venv/|(^|/)\\.security-reports/}"
+DETECT_SECRETS_EXCLUDE_FILES_REGEX="${DETECT_SECRETS_EXCLUDE_FILES_REGEX:-(^|/)requirements/.*-requirements\\.md$|(^|/)\\.git/|(^|/)pg_install-venv/|(^|/)\\.venv/|(^|/)venv/|(^|/)\\.security-reports/|(^|/)\\.secrets/}"
 
 #R010: Emit deterministic multiline startup header for security lane configuration.
 echo "============================================================"

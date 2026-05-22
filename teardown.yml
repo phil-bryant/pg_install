@@ -41,7 +41,7 @@
         postgres_running_for_backup: >-
           {{
             (brew_services_for_backup.stdout_lines | default([])
-            | select("match", "^" ~ postgres_service_name ~ "\\s+started\\b")
+            | select("match", "^" ~ postgres_service_name ~ "\s+started\b")
             | list | length) > 0
           }}
       changed_when: false
@@ -87,7 +87,7 @@
         postgres_running: >-
           {{
             (brew_services.stdout_lines | default([])
-            | select("match", "^" ~ postgres_service_name ~ "\\s+started\\b")
+            | select("match", "^" ~ postgres_service_name ~ "\s+started\b")
             | list | length) > 0
           }}
       changed_when: false
@@ -96,8 +96,8 @@
         postgres_services: >-
           {{
             brew_services.stdout_lines | default([])
-            | select("match", "^postgresql(@[0-9]+)?\\s+")
-            | map("regex_replace", "\\s+.*$", "")
+            | select("match", "^postgresql(@[0-9]+)?\s+")
+            | map("regex_replace", "\s+.*$", "")
             | list
           }}
       changed_when: false
@@ -131,10 +131,29 @@
       register: postgres_pids
       failed_when: false
       changed_when: false
+    - name: Send TERM to remaining PostgreSQL processes
+      ansible.builtin.command:
+        argv: [pkill, -TERM, -f, "/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: "]
+      when: postgres_pids.stdout | trim != ""
+      register: postgres_term
+      failed_when: false
+      changed_when: postgres_term.rc == 0
+    - name: Pause briefly for graceful shutdown
+      ansible.builtin.pause: {seconds: 3}
+      when: postgres_pids.stdout | trim != ""
+    - name: Re-check for remaining PostgreSQL processes after TERM
+      ansible.builtin.command:
+        argv: [pgrep, -f, "/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: "]
+      register: postgres_pids_post_term
+      failed_when: false
+      changed_when: false
+      when: postgres_pids.stdout | trim != ""
     - name: Force kill remaining PostgreSQL processes
       ansible.builtin.command:
-        argv: [pkill, -9, -f, postgres]
-      when: postgres_pids.stdout | trim != ""
+        argv: [pkill, -9, -f, "/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: "]
+      when:
+        - postgres_pids.stdout | trim != ""
+        - (postgres_pids_post_term.stdout | default('') | trim) != ""
       register: postgres_kill
       failed_when: false
       changed_when: postgres_kill.rc == 0
@@ -142,8 +161,13 @@
       ansible.builtin.command:
         argv: [pgrep, -f, "/opt/homebrew/opt/postgresql@.*/bin/postgres|postgres: "]
       register: postgres_pids_after
+      retries: 10
+      delay: 1
+      until: postgres_pids_after.rc != 0 or (postgres_pids_after.stdout | trim) == ""
       changed_when: false
-      failed_when: postgres_pids_after.rc == 0 and postgres_pids_after.stdout | trim != ""
+      failed_when:
+        - postgres_pids_after.rc == 0
+        - postgres_pids_after.stdout | trim != ""
     - name: Remove PostgreSQL data directory
       ansible.builtin.file:
         path: "{{ postgres_data_dir }}"

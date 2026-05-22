@@ -122,6 +122,7 @@ run_clamscan_once() {
     --exclude-dir='^\.pytest_cache$' \
     --exclude-dir='^\.mypy_cache$' \
     --exclude-dir='^\.gomodcache$' \
+    --exclude-dir='^\.secrets$' \
     "${scan_target}" >"${report_path}" 2>&1 &
   local clamscan_pid=$!
   local start_epoch
